@@ -1,12 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches-ignore:
-      - develop
-      - alpha
-      - beta
-      - main # release-orchestrator handles main pushes with full test suite
   pull_request:
   workflow_call:
     # Called by testing-strategy.yml for staged releases
