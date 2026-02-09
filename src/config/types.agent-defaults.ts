@@ -53,6 +53,8 @@ export type CliBackendConfig = {
   command: string;
   /** Base args applied to every invocation. */
   args?: string[];
+  /** Args to use when streaming is enabled. */
+  streamingArgs?: string[];
   /** Output parsing mode (default: json). */
   output?: "json" | "text" | "jsonl";
   /** Output parsing mode when resuming a CLI session. */
@@ -85,6 +87,8 @@ export type CliBackendConfig = {
   systemPromptMode?: "append" | "replace";
   /** When to send system prompt. */
   systemPromptWhen?: "first" | "always" | "never";
+  /** Env var name used to inject system prompt as a file path (e.g. GEMINI_SYSTEM_MD). */
+  systemPromptEnvVar?: string;
   /** Flag used to pass image paths. */
   imageArg?: string;
   /** How to pass multiple images. */

@@ -15,6 +15,33 @@ vi.mock("../process/exec.js", () => ({
   runExec: (...args: unknown[]) => runExecMock(...args),
 }));
 
+// Mock the helpers that create temp files / extensions
+vi.mock("./cli-runner/helpers.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./cli-runner/helpers.js")>();
+  return {
+    ...actual,
+    createGeminiExtension: vi.fn(async () => ({
+      path: "/tmp/mock-ext",
+      cleanup: async () => {},
+    })),
+    writeSystemPromptFile: vi.fn(async () => ({
+      path: "/tmp/mock-sysprompt.md",
+      cleanup: async () => {},
+    })),
+  };
+});
+
+vi.mock("./pi-tools.js", () => ({
+  createOpenClawCodingTools: vi.fn(() => [
+    {
+      name: "mock_tool",
+      description: "A mock tool",
+      parameters: { type: "object", properties: { input: { type: "string" } } },
+      execute: async (params: { input: string }) => `Executed: ${params.input}`,
+    },
+  ]),
+}));
+
 describe("runCliAgent resume cleanup", () => {
   beforeEach(() => {
     runCommandWithTimeoutMock.mockReset();
@@ -222,5 +249,65 @@ describe("cleanupSuspendedCliProcesses", () => {
     const killCall = runExecMock.mock.calls[1] ?? [];
     expect(killCall[0]).toBe("kill");
     expect(killCall[1]).toEqual(["-9", "50", "51"]);
+  });
+});
+
+describe("runCliAgent error handling", () => {
+  beforeEach(() => {
+    runCommandWithTimeoutMock.mockReset();
+    runExecMock.mockReset();
+  });
+
+  it("throws FailoverError with auth reason for exit code 41", async () => {
+    runExecMock.mockResolvedValue({ stdout: "", stderr: "" });
+    runCommandWithTimeoutMock.mockResolvedValueOnce({
+      stdout: "",
+      stderr: "FatalAuthenticationError: invalid credentials",
+      code: 41,
+      signal: null,
+      killed: false,
+    });
+
+    await expect(
+      runCliAgent({
+        sessionId: "s1",
+        sessionFile: "/tmp/session.jsonl",
+        workspaceDir: "/tmp",
+        prompt: "hi",
+        provider: "gemini-cli",
+        model: "gemini-pro",
+        timeoutMs: 1000,
+        runId: "run-1",
+      }),
+    ).rejects.toThrow("FatalAuthenticationError");
+  });
+
+  it("returns correct EmbeddedPiRunResult shape", async () => {
+    runExecMock.mockResolvedValue({ stdout: "", stderr: "" });
+    runCommandWithTimeoutMock.mockResolvedValueOnce({
+      stdout: '{"response": "Hello world", "stats": {}}',
+      stderr: "",
+      code: 0,
+      signal: null,
+      killed: false,
+    });
+
+    const result = await runCliAgent({
+      sessionId: "s1",
+      sessionFile: "/tmp/session.jsonl",
+      workspaceDir: "/tmp",
+      prompt: "hi",
+      provider: "gemini-cli",
+      model: "gemini-pro",
+      timeoutMs: 1000,
+      runId: "run-1",
+    });
+
+    // Verify proper EmbeddedPiRunResult shape
+    expect(result).toHaveProperty("meta");
+    expect(result).toHaveProperty("meta.durationMs");
+    expect(result).toHaveProperty("meta.agentMeta");
+    expect(result.meta.agentMeta?.provider).toBe("gemini-cli");
+    expect(result.payloads?.[0]?.text).toContain("Hello world");
   });
 });

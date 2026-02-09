@@ -407,7 +407,9 @@ export async function agentCommand(
               extraSystemPrompt: opts.extraSystemPrompt,
               cliSessionId,
               images: opts.images,
-              streamParams: opts.streamParams,
+              onAgentEvent: (evt) => {
+                emitAgentEvent({ runId, ...evt });
+              },
             });
           }
           const authProfileId =

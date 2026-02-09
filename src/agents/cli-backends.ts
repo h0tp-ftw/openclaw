@@ -76,6 +76,30 @@ const DEFAULT_CODEX_BACKEND: CliBackendConfig = {
   serialize: true,
 };
 
+const GEMINI_MODEL_ALIASES: Record<string, string> = {
+  pro: "gemini-2.5-pro",
+  flash: "gemini-2.5-flash",
+  "pro-3": "gemini-3-pro-preview",
+  "flash-3": "gemini-3-flash-preview",
+  "gemini-3-pro": "gemini-3-pro-preview",
+  "gemini-3-flash": "gemini-3-flash-preview",
+  "2.5-pro": "gemini-2.5-pro",
+  "2.5-flash": "gemini-2.5-flash",
+};
+
+const DEFAULT_GEMINI_BACKEND: CliBackendConfig = {
+  command: "gemini",
+  args: ["-p", "--output-format", "json", "--yolo"],
+  streamingArgs: ["-p", "--output-format", "stream-json", "--yolo"],
+  output: "json",
+  input: "arg",
+  modelArg: "-m",
+  modelAliases: GEMINI_MODEL_ALIASES,
+  sessionMode: "none",
+  systemPromptEnvVar: "GEMINI_SYSTEM_MD",
+  serialize: true,
+};
+
 function normalizeBackendKey(key: string): string {
   return normalizeProviderId(key);
 }
@@ -113,6 +137,7 @@ export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
   const ids = new Set<string>([
     normalizeBackendKey("claude-cli"),
     normalizeBackendKey("codex-cli"),
+    normalizeBackendKey("gemini-cli"),
   ]);
   const configured = cfg?.agents?.defaults?.cliBackends ?? {};
   for (const key of Object.keys(configured)) {
@@ -139,6 +164,14 @@ export function resolveCliBackendConfig(
   }
   if (normalized === "codex-cli") {
     const merged = mergeBackendConfig(DEFAULT_CODEX_BACKEND, override);
+    const command = merged.command?.trim();
+    if (!command) {
+      return null;
+    }
+    return { id: normalized, config: { ...merged, command } };
+  }
+  if (normalized === "gemini-cli") {
+    const merged = mergeBackendConfig(DEFAULT_GEMINI_BACKEND, override);
     const command = merged.command?.trim();
     if (!command) {
       return null;

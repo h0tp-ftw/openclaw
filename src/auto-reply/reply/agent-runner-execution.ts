@@ -194,6 +194,14 @@ export async function runAgentTurnWithFallback(params: {
                   ownerNumbers: params.followupRun.run.ownerNumbers,
                   cliSessionId,
                   images: params.opts?.images,
+                  onPartialReply: params.opts?.onPartialReply,
+                  onReasoningStream: params.opts?.onReasoningStream,
+                  onAgentEvent: (evt) => {
+                    params.opts?.onAgentEvent?.(evt);
+                    if (evt.stream === "compaction" && evt.data.phase === "end" && !evt.data.willRetry) {
+                      autoCompactionCompleted = true;
+                    }
+                  }
                 });
 
                 // CLI backends don't emit streaming assistant events, so we need to

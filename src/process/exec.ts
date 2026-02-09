@@ -76,6 +76,8 @@ export type CommandOptions = {
   input?: string;
   env?: NodeJS.ProcessEnv;
   windowsVerbatimArguments?: boolean;
+  onStdout?: (data: string) => void;
+  onStderr?: (data: string) => void;
 };
 
 export async function runCommandWithTimeout(
@@ -134,10 +136,14 @@ export async function runCommandWithTimeout(
     }
 
     child.stdout?.on("data", (d) => {
-      stdout += d.toString();
+      const data = d.toString();
+      stdout += data;
+      options.onStdout?.(data);
     });
     child.stderr?.on("data", (d) => {
-      stderr += d.toString();
+      const data = d.toString();
+      stderr += data;
+      options.onStderr?.(data);
     });
     child.on("error", (err) => {
       if (settled) {

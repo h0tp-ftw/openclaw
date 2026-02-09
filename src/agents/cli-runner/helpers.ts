@@ -1,12 +1,13 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { CliBackendConfig } from "../../config/types.js";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";
 import { runExec } from "../../process/exec.js";
 import { buildTtsSystemPromptHint } from "../../tts/tts.js";
@@ -15,6 +16,74 @@ import { resolveDefaultModelForAgent } from "../model-selection.js";
 import { detectRuntimeShell } from "../shell-utils.js";
 import { buildSystemPromptParams } from "../system-prompt-params.js";
 import { buildAgentSystemPrompt } from "../system-prompt.js";
+
+/**
+ * Write system prompt to a temporary GEMINI.md file for env-var-based injection
+ * (e.g. GEMINI_SYSTEM_MD). Returns the file path and a cleanup function.
+ */
+export async function writeSystemPromptFile(
+  systemPrompt: string,
+): Promise<{ path: string; cleanup: () => Promise<void> }> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-sysprompt-"));
+  const promptFile = path.join(tempDir, "GEMINI.md");
+  await fs.writeFile(promptFile, systemPrompt, "utf-8");
+  const cleanup = async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  };
+  return { path: promptFile, cleanup };
+}
+
+export async function createGeminiExtension(): Promise<{ path: string; cleanup: () => Promise<void> }> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-gemini-ext-"));
+  const extensionJsonPath = path.join(tempDir, "gemini-extension.json");
+
+  // Resolve path relative to this module, not process.cwd()
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const srcServerPath = path.resolve(__dirname, "../mcp-server.ts");
+  const distServerPath = path.resolve(__dirname, "../mcp-server.js");
+
+  let command = "node";
+  let args: string[] = [];
+
+  try {
+    await fs.access(srcServerPath);
+    // Use tsx for source
+    command = "node";
+    args = ["--import", "tsx", srcServerPath];
+  } catch {
+    // Fallback to compiled output
+    args = [distServerPath];
+  }
+
+  const manifest = {
+    name: "openclaw-tools",
+    version: "1.0.0",
+    description: "OpenClaw Tools for Gemini CLI",
+    excludeTools: [
+      "read_file", "read_many_files", "write_file", "edit",
+      "replace", "list_dir", "search_filesystem", "search_files",
+      "run_shell_command", "web_fetch", "web_search", "google_web_search",
+      "save_memory", "write_todos", "activate_skill"
+    ],
+    mcpServers: {
+      openclaw: {
+        command,
+        args,
+        cwd: process.cwd(),
+      }
+    }
+  };
+
+  await fs.writeFile(extensionJsonPath, JSON.stringify(manifest, null, 2), "utf-8");
+
+  const cleanup = async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  };
+
+  return { path: tempDir, cleanup };
+}
+
+
 
 const CLI_RUN_QUEUE = new Map<string, Promise<unknown>>();
 
@@ -194,6 +263,8 @@ function buildModelAliasLines(cfg?: OpenClawConfig) {
     .map((entry) => `- ${entry.alias}: ${entry.model}`);
 }
 
+
+
 export function buildSystemPrompt(params: {
   workspaceDir: string;
   config?: OpenClawConfig;
@@ -268,8 +339,10 @@ export function normalizeCliModel(modelId: string, backend: CliBackendConfig): s
 function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
   const pick = (key: string) =>
     typeof raw[key] === "number" && raw[key] > 0 ? raw[key] : undefined;
-  const input = pick("input_tokens") ?? pick("inputTokens");
-  const output = pick("output_tokens") ?? pick("outputTokens");
+  const input = pick("input_tokens") ?? pick("inputTokens")
+    ?? pick("prompt_tokens") ?? pick("promptTokens");
+  const output = pick("output_tokens") ?? pick("outputTokens")
+    ?? pick("candidates_tokens") ?? pick("candidatesTokens");
   const cacheRead =
     pick("cache_read_input_tokens") ?? pick("cached_input_tokens") ?? pick("cacheRead");
   const cacheWrite = pick("cache_write_input_tokens") ?? pick("cacheWrite");
@@ -304,6 +377,16 @@ function collectText(value: unknown): string {
   }
   if (isRecord(value.message)) {
     return collectText(value.message);
+  }
+  // Handle Gemini CLI response format
+  if (typeof value.response === "string") {
+    return value.response;
+  }
+  if (Array.isArray(value.candidates)) {
+    return value.candidates.map((c) => collectText(c)).join("");
+  }
+  if (Array.isArray(value.parts)) {
+    return value.parts.map((p) => collectText(p)).join("");
   }
   return "";
 }
