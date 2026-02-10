@@ -17,15 +17,16 @@ import {
   parseCliJson,
   parseCliJsonl,
   resolvePromptInput,
+  resolveSessionIdToSend,
   resolveSystemPromptUsage,
   writeCliImages,
   writeSystemPromptFile,
   createGeminiExtension,
 } from "./cli-runner/helpers.js";
-import { createOpenClawCodingTools } from "./pi-tools.js";
 import { resolveOpenClawDocsPath } from "./docs-path.js";
 import { FailoverError, resolveFailoverStatus } from "./failover-error.js";
 import { classifyFailoverReason, isFailoverErrorMessage } from "./pi-embedded-helpers.js";
+import { createOpenClawCodingTools } from "./pi-tools.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace-run.js";
 
 const log = createSubsystemLogger("agent/claude-cli");
@@ -169,16 +170,41 @@ export async function runCliAgent(params: {
       prompt: params.prompt,
     });
 
-    const isStreaming = !!(params.onPartialReply || params.onReasoningStream || params.onAgentEvent);
+    // Determine whether to resume an existing Gemini CLI session.
+    // When cliSessionId is set, we have a previous session to continue.
+    const { sessionId: resolvedCliSessionId, isNew: isNewCliSession } = resolveSessionIdToSend({
+      backend,
+      cliSessionId: params.cliSessionId,
+    });
+    const useResume =
+      !isNewCliSession && !!resolvedCliSessionId && (backend.resumeArgs?.length ?? 0) > 0;
+
+    const isStreaming = !!(
+      params.onPartialReply ||
+      params.onReasoningStream ||
+      params.onAgentEvent
+    );
+    const baseArgs = useResume
+      ? (backend.resumeArgs ?? backend.args ?? [])
+      : isStreaming && backend.streamingArgs
+        ? backend.streamingArgs
+        : (backend.args ?? []);
+
     const args = buildCliArgs({
       backend,
-      baseArgs: isStreaming && backend.streamingArgs ? backend.streamingArgs : (backend.args ?? []),
+      baseArgs: useResume
+        ? baseArgs.map((arg) => arg.replaceAll("{sessionId}", resolvedCliSessionId!))
+        : baseArgs,
       modelId: normalizedModel,
-      sessionId: params.cliSessionId ?? params.sessionId,
-      systemPrompt: resolveSystemPromptUsage({ backend, isNewSession: true, systemPrompt }),
+      sessionId: resolvedCliSessionId,
+      systemPrompt: resolveSystemPromptUsage({
+        backend,
+        isNewSession: isNewCliSession,
+        systemPrompt,
+      }),
       imagePaths,
       promptArg: argsPrompt,
-      useResume: false,
+      useResume,
     });
 
     // Ensure the MCP extension is loaded
@@ -210,9 +236,16 @@ export async function runCliAgent(params: {
 
     // Track accumulated assistant text for delta computation in onAgentEvent
     let accumulatedText = "";
+    // Track the Gemini CLI session ID (from init event) and usage (from result event)
+    let geminiCliSessionId: string | undefined;
+    let streamUsage:
+      | { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number }
+      | undefined;
+    // Track accumulated reasoning text
+    let accumulatedReasoning = "";
 
     log.info(
-      `cli exec: provider=${params.provider} model=${normalizedModel} promptChars=${params.prompt.length}`,
+      `cli exec: provider=${params.provider} model=${normalizedModel} promptChars=${params.prompt.length} resume=${useResume} cliSession=${resolvedCliSessionId ?? "new"}`,
     );
 
     const result = await runCommandWithTimeout([backend.command ?? "gemini", ...args], {
@@ -228,9 +261,27 @@ export async function runCliAgent(params: {
           try {
             const chunk = JSON.parse(trimmed);
 
+            // Gemini stream-json event: init — capture session_id for continuation
+            if (chunk.type === "init") {
+              if (typeof chunk.session_id === "string" && chunk.session_id.trim()) {
+                geminiCliSessionId = chunk.session_id.trim();
+              }
+              if (params.onAgentEvent) {
+                params.onAgentEvent({
+                  stream: "init",
+                  data: {
+                    sessionId: geminiCliSessionId,
+                    model: chunk.model,
+                    resumed: useResume,
+                  },
+                });
+              }
+            }
+
             // Gemini stream-json event: assistant message
-            if (
-              chunk.type === "message" && chunk.role === "model" ||
+            else if (
+              (chunk.type === "message" &&
+                (chunk.role === "model" || chunk.role === "assistant")) ||
               chunk.type === "text"
             ) {
               const content = chunk.content ?? chunk.text ?? "";
@@ -245,13 +296,16 @@ export async function runCliAgent(params: {
             }
 
             // Gemini stream-json event: thinking / reasoning
+            // The Gemini CLI may emit these as "thinking" type events or inline
+            // in the model's response. We surface them for the UI.
             else if (chunk.type === "thinking") {
-              const content = chunk.content ?? "";
+              const content = chunk.content ?? chunk.text ?? "";
+              accumulatedReasoning += content;
               if (params.onReasoningStream) void params.onReasoningStream({ text: content });
               if (params.onAgentEvent) {
                 params.onAgentEvent({
                   stream: "reasoning",
-                  data: { text: content, delta: content },
+                  data: { text: accumulatedReasoning, delta: content },
                 });
               }
             }
@@ -272,6 +326,48 @@ export async function runCliAgent(params: {
                 params.onAgentEvent({
                   stream: "tool",
                   data: { phase: "end", tool: chunk.tool_id, status: chunk.status },
+                });
+              }
+            }
+
+            // Gemini stream-json event: result — capture usage stats
+            else if (chunk.type === "result") {
+              const stats = chunk.stats;
+              if (stats && typeof stats === "object") {
+                streamUsage = {
+                  input:
+                    typeof stats.input_tokens === "number"
+                      ? stats.input_tokens
+                      : typeof stats.input === "number"
+                        ? stats.input
+                        : undefined,
+                  output:
+                    typeof stats.output_tokens === "number"
+                      ? stats.output_tokens
+                      : typeof stats.output === "number"
+                        ? stats.output
+                        : undefined,
+                  total:
+                    typeof stats.total_tokens === "number"
+                      ? stats.total_tokens
+                      : typeof stats.total === "number"
+                        ? stats.total
+                        : undefined,
+                  cacheRead:
+                    typeof stats.cached === "number" && stats.cached > 0 ? stats.cached : undefined,
+                };
+              }
+              if (params.onAgentEvent) {
+                params.onAgentEvent({
+                  stream: "result",
+                  data: {
+                    status: chunk.status,
+                    usage: streamUsage,
+                    sessionId: geminiCliSessionId,
+                    durationMs:
+                      typeof stats?.duration_ms === "number" ? stats.duration_ms : undefined,
+                    toolCalls: typeof stats?.tool_calls === "number" ? stats.tool_calls : undefined,
+                  },
                 });
               }
             }
@@ -310,8 +406,12 @@ export async function runCliAgent(params: {
 
       // Map Gemini CLI-specific exit codes
       switch (result.code) {
-        case 41: reason = "auth"; break;        // FatalAuthenticationError
-        case 53: reason = "rate_limit"; break;  // FatalTurnLimitedError (retryable)
+        case 41:
+          reason = "auth";
+          break; // FatalAuthenticationError
+        case 53:
+          reason = "rate_limit";
+          break; // FatalTurnLimitedError (retryable)
         case 42: // FatalInputError
         case 44: // FatalSandboxError
         case 52: // FatalConfigError
@@ -333,26 +433,35 @@ export async function runCliAgent(params: {
     // --- Parse output ---
     const outputMode = backend.output;
     let text = stdout;
-    let usage: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number } | undefined;
+    // Prefer usage captured from streaming result events; fall back to final parse
+    let usage = streamUsage;
 
     if (outputMode === "json" || outputMode === "jsonl") {
-      const parsed = outputMode === "jsonl"
-        ? parseCliJsonl(stdout, backend)
-        : parseCliJson(stdout, backend);
+      const parsed =
+        outputMode === "jsonl" ? parseCliJsonl(stdout, backend) : parseCliJson(stdout, backend);
       if (parsed) {
         text = parsed.text;
-        usage = parsed.usage;
+        // If we didn't capture usage from streaming, use the parsed value
+        if (!usage) {
+          usage = parsed.usage;
+        }
+        // If we didn't capture session ID from streaming, use the parsed value
+        if (!geminiCliSessionId && parsed.sessionId) {
+          geminiCliSessionId = parsed.sessionId;
+        }
       }
     }
 
     const payloads = text?.trim() ? [{ text: text.trim() }] : undefined;
 
+    // Return the Gemini CLI session ID (not the OpenClaw session ID) so it gets
+    // stored for conversation continuation on the next message.
     return {
       payloads,
       meta: {
         durationMs: Date.now() - started,
         agentMeta: {
-          sessionId: params.sessionId,
+          sessionId: geminiCliSessionId ?? params.sessionId,
           provider: params.provider,
           model: modelId,
           usage,

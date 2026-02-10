@@ -333,14 +333,22 @@ function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
   const pick = (key: string) =>
     typeof raw[key] === "number" && raw[key] > 0 ? raw[key] : undefined;
   const input =
-    pick("input_tokens") ?? pick("inputTokens") ?? pick("prompt_tokens") ?? pick("promptTokens");
+    pick("input_tokens") ??
+    pick("inputTokens") ??
+    pick("prompt_tokens") ??
+    pick("promptTokens") ??
+    pick("input");
   const output =
     pick("output_tokens") ??
     pick("outputTokens") ??
     pick("candidates_tokens") ??
-    pick("candidatesTokens");
+    pick("candidatesTokens") ??
+    pick("output");
   const cacheRead =
-    pick("cache_read_input_tokens") ?? pick("cached_input_tokens") ?? pick("cacheRead");
+    pick("cache_read_input_tokens") ??
+    pick("cached_input_tokens") ??
+    pick("cached") ??
+    pick("cacheRead");
   const cacheWrite = pick("cache_write_input_tokens") ?? pick("cacheWrite");
   const total = pick("total_tokens") ?? pick("total");
   if (!input && !output && !cacheRead && !cacheWrite && !total) {
@@ -457,8 +465,16 @@ export function parseCliJsonl(raw: string, backend: CliBackendConfig): CliOutput
     if (!sessionId && typeof parsed.thread_id === "string") {
       sessionId = parsed.thread_id.trim();
     }
+    // Gemini stream-json init event: capture session_id
+    if (parsed.type === "init" && !sessionId && typeof parsed.session_id === "string") {
+      sessionId = parsed.session_id.trim() || undefined;
+    }
     if (isRecord(parsed.usage)) {
       usage = toUsage(parsed.usage) ?? usage;
+    }
+    // Gemini stream-json result event: capture usage from stats
+    if (parsed.type === "result" && isRecord(parsed.stats)) {
+      usage = toUsage(parsed.stats as Record<string, unknown>) ?? usage;
     }
     const item = isRecord(parsed.item) ? parsed.item : null;
     if (item && typeof item.text === "string") {
@@ -467,10 +483,10 @@ export function parseCliJsonl(raw: string, backend: CliBackendConfig): CliOutput
         texts.push(item.text);
       }
     }
-    // Gemini message format
+    // Gemini message format (role: "assistant" or "model")
     if (
       parsed.type === "message" &&
-      parsed.role === "assistant" &&
+      (parsed.role === "assistant" || parsed.role === "model") &&
       (typeof parsed.content === "string" || typeof parsed.text === "string")
     ) {
       // Accumulate deltas without newline separation
