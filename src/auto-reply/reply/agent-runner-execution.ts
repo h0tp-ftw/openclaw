@@ -197,11 +197,31 @@ export async function runAgentTurnWithFallback(params: {
                   onPartialReply: params.opts?.onPartialReply,
                   onReasoningStream: params.opts?.onReasoningStream,
                   onAgentEvent: (evt) => {
+                    // Refresh typing indicator on streaming events from CLI backends.
+                    // Without this, the typing TTL expires during long tool-use
+                    // cycles because refreshTypingTtl() is never called for CLI runs.
+                    if (evt.stream === "tool") {
+                      const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
+                      if (phase === "start" || phase === "update") {
+                        void params.typingSignals.signalToolStart();
+                      }
+                    } else if (evt.stream === "assistant") {
+                      const delta = typeof evt.data.delta === "string" ? evt.data.delta : undefined;
+                      if (delta) {
+                        void params.typingSignals.signalTextDelta(delta);
+                      }
+                    } else if (evt.stream === "reasoning") {
+                      void params.typingSignals.signalReasoningDelta();
+                    }
                     params.opts?.onAgentEvent?.(evt);
-                    if (evt.stream === "compaction" && evt.data.phase === "end" && !evt.data.willRetry) {
+                    if (
+                      evt.stream === "compaction" &&
+                      evt.data.phase === "end" &&
+                      !evt.data.willRetry
+                    ) {
                       autoCompactionCompleted = true;
                     }
-                  }
+                  },
                 });
 
                 // CLI backends don't emit streaming assistant events, so we need to

@@ -245,6 +245,8 @@ export async function runCliAgent(params: {
       | undefined;
     // Track accumulated reasoning text
     let accumulatedReasoning = "";
+    // Track streaming errors (e.g. "Loop detected, stopping execution")
+    const streamErrors: string[] = [];
 
     log.info(
       `cli exec: provider=${params.provider} model=${normalizedModel} promptChars=${params.prompt.length} resume=${useResume} cliSession=${resolvedCliSessionId ?? "new"}`,
@@ -259,7 +261,9 @@ export async function runCliAgent(params: {
         const lines = data.split("\n");
         for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed) continue;
+          if (!trimmed) {
+            continue;
+          }
           try {
             const chunk = JSON.parse(trimmed);
 
@@ -287,7 +291,9 @@ export async function runCliAgent(params: {
               chunk.type === "text"
             ) {
               const content = chunk.content ?? chunk.text ?? "";
-              if (params.onPartialReply) void params.onPartialReply({ text: content });
+              if (params.onPartialReply) {
+                void params.onPartialReply({ text: content });
+              }
               accumulatedText += content;
               if (params.onAgentEvent) {
                 params.onAgentEvent({
@@ -303,7 +309,9 @@ export async function runCliAgent(params: {
             else if (chunk.type === "thinking") {
               const content = chunk.content ?? chunk.text ?? "";
               accumulatedReasoning += content;
-              if (params.onReasoningStream) void params.onReasoningStream({ text: content });
+              if (params.onReasoningStream) {
+                void params.onReasoningStream({ text: content });
+              }
               if (params.onAgentEvent) {
                 params.onAgentEvent({
                   stream: "reasoning",
@@ -376,6 +384,11 @@ export async function runCliAgent(params: {
 
             // Gemini stream-json event: error
             else if (chunk.type === "error") {
+              const errMsg = typeof chunk.message === "string" ? chunk.message.trim() : "";
+              if (errMsg) {
+                streamErrors.push(errMsg);
+                log.warn(`cli stream error: ${errMsg}`);
+              }
               if (params.onAgentEvent) {
                 params.onAgentEvent({ stream: "error", data: chunk });
               }
@@ -397,8 +410,12 @@ export async function runCliAgent(params: {
     const stdout = result.stdout.trim();
     const stderr = result.stderr.trim();
     if (shouldLogVerbose()) {
-      if (stdout) log.debug(`cli stdout:\n${stdout}`);
-      if (stderr) log.debug(`cli stderr:\n${stderr}`);
+      if (stdout) {
+        log.debug(`cli stdout:\n${stdout}`);
+      }
+      if (stderr) {
+        log.debug(`cli stderr:\n${stderr}`);
+      }
     }
 
     // --- Error handling with Gemini-specific exit codes ---
@@ -454,6 +471,12 @@ export async function runCliAgent(params: {
       }
     }
 
+    // If the CLI produced stream errors (e.g. loop detection) but no assistant
+    // text, surface the error messages so the user actually sees what happened.
+    if (!text?.trim() && streamErrors.length > 0) {
+      text = `⚠️ ${streamErrors.join("\n")}`;
+    }
+
     const payloads = text?.trim() ? [{ text: text.trim() }] : undefined;
 
     // Return the Gemini CLI session ID (not the OpenClaw session ID) so it gets
@@ -487,9 +510,15 @@ export async function runCliAgent(params: {
     }
     throw err;
   } finally {
-    if (cleanupExtension) await cleanupExtension();
-    if (cleanupSystemPrompt) await cleanupSystemPrompt();
-    if (cleanupImages) await cleanupImages();
+    if (cleanupExtension) {
+      await cleanupExtension();
+    }
+    if (cleanupSystemPrompt) {
+      await cleanupSystemPrompt();
+    }
+    if (cleanupImages) {
+      await cleanupImages();
+    }
   }
 }
 

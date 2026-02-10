@@ -124,11 +124,22 @@ export async function runCommandWithTimeout(
     let stdout = "";
     let stderr = "";
     let settled = false;
-    const timer = setTimeout(() => {
-      if (typeof child.kill === "function") {
-        child.kill("SIGKILL");
+
+    // Activity-based timeout: reset the kill timer whenever the process
+    // produces output on stdout or stderr. This prevents killing processes
+    // that are actively streaming data (e.g., Gemini CLI stream-json output).
+    let timer: NodeJS.Timeout | undefined;
+    const resetTimer = () => {
+      if (timer) {
+        clearTimeout(timer);
       }
-    }, timeoutMs);
+      timer = setTimeout(() => {
+        if (typeof child.kill === "function") {
+          child.kill("SIGKILL");
+        }
+      }, timeoutMs);
+    };
+    resetTimer();
 
     if (hasInput && child.stdin) {
       child.stdin.write(input ?? "");
@@ -138,11 +149,13 @@ export async function runCommandWithTimeout(
     child.stdout?.on("data", (d) => {
       const data = d.toString();
       stdout += data;
+      resetTimer();
       options.onStdout?.(data);
     });
     child.stderr?.on("data", (d) => {
       const data = d.toString();
       stderr += data;
+      resetTimer();
       options.onStderr?.(data);
     });
     child.on("error", (err) => {
@@ -150,7 +163,9 @@ export async function runCommandWithTimeout(
         return;
       }
       settled = true;
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
       reject(err);
     });
     child.on("close", (code, signal) => {
@@ -158,7 +173,9 @@ export async function runCommandWithTimeout(
         return;
       }
       settled = true;
-      clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
       resolve({ stdout, stderr, code, signal, killed: child.killed });
     });
   });
