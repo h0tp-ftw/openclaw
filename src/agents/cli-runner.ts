@@ -254,6 +254,9 @@ export async function runCliAgent(params: {
 
     const result = await runCommandWithTimeout([backend.command ?? "gemini", ...args], {
       timeoutMs: params.timeoutMs,
+      // Enforce a strict total timeout to prevent infinite loops (e.g. continuous "thinking" output)
+      // from keeping the process alive indefinitely.
+      maxTotalTimeoutMs: params.timeoutMs,
       cwd: workspaceDir,
       env,
       input: stdin ?? "",

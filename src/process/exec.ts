@@ -72,6 +72,12 @@ export type SpawnResult = {
 
 export type CommandOptions = {
   timeoutMs: number;
+  /**
+   * Optional maximum total execution time, regardless of activity.
+   * If set, the process will be killed after this duration even if it is
+   * emitting output. Useful for preventing infinite loops in interactive tools.
+   */
+  maxTotalTimeoutMs?: number;
   cwd?: string;
   input?: string;
   env?: NodeJS.ProcessEnv;
@@ -86,7 +92,7 @@ export async function runCommandWithTimeout(
 ): Promise<SpawnResult> {
   const options: CommandOptions =
     typeof optionsOrTimeout === "number" ? { timeoutMs: optionsOrTimeout } : optionsOrTimeout;
-  const { timeoutMs, cwd, input, env } = options;
+  const { timeoutMs, maxTotalTimeoutMs, cwd, input, env } = options;
   const { windowsVerbatimArguments } = options;
   const hasInput = input !== undefined;
 
@@ -141,6 +147,16 @@ export async function runCommandWithTimeout(
     };
     resetTimer();
 
+    // Total timeout: strictly kill the process after maxTotalTimeoutMs, regardless of activity.
+    let totalTimer: NodeJS.Timeout | undefined;
+    if (maxTotalTimeoutMs && maxTotalTimeoutMs > 0) {
+      totalTimer = setTimeout(() => {
+        if (typeof child.kill === "function") {
+          child.kill("SIGKILL");
+        }
+      }, maxTotalTimeoutMs);
+    }
+
     if (hasInput && child.stdin) {
       child.stdin.write(input ?? "");
       child.stdin.end();
@@ -166,6 +182,9 @@ export async function runCommandWithTimeout(
       if (timer) {
         clearTimeout(timer);
       }
+      if (totalTimer) {
+        clearTimeout(totalTimer);
+      }
       reject(err);
     });
     child.on("close", (code, signal) => {
@@ -175,6 +194,9 @@ export async function runCommandWithTimeout(
       settled = true;
       if (timer) {
         clearTimeout(timer);
+      }
+      if (totalTimer) {
+        clearTimeout(totalTimer);
       }
       resolve({ stdout, stderr, code, signal, killed: child.killed });
     });
