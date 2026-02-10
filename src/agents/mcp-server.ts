@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline";
-import { createOpenClawCodingTools } from "./pi-tools.js";
 import { loadConfig } from "../config/io.js";
+import { createOpenClawCodingTools } from "./pi-tools.js";
 
 // Basic JSON-RPC 2.0 types
 type JsonRpcRequest = {
@@ -37,7 +37,7 @@ async function main() {
     modelId,
   });
 
-  const toolMap = new Map(tools.map(t => [t.name, t]));
+  const toolMap = new Map(tools.map((t) => [t.name, t]));
 
   const send = (msg: JsonRpcResponse) => {
     process.stdout.write(JSON.stringify(msg) + "\n");
@@ -46,7 +46,7 @@ async function main() {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
-    terminal: false
+    terminal: false,
   });
 
   const handleRequest = async (line: string) => {
@@ -67,9 +67,9 @@ async function main() {
               },
               serverInfo: {
                 name: "openclaw-mcp",
-                version: "1.0.0"
-              }
-            }
+                version: "1.0.0",
+              },
+            },
           });
           break;
 
@@ -78,17 +78,17 @@ async function main() {
           break;
 
         case "tools/list": {
-          const mcpTools = tools.map(t => ({
+          const mcpTools = tools.map((t) => ({
             name: t.name,
             description: t.description,
-            inputSchema: t.parameters || { type: "object", properties: {} }
+            inputSchema: t.parameters || { type: "object", properties: {} },
           }));
           send({
             jsonrpc: "2.0",
             id: req.id,
             result: {
-              tools: mcpTools
-            }
+              tools: mcpTools,
+            },
           });
           break;
         }
@@ -100,25 +100,26 @@ async function main() {
             send({
               jsonrpc: "2.0",
               id: req.id,
-              error: { code: -32601, message: `Tool not found: ${name}` }
+              error: { code: -32601, message: `Tool not found: ${name}` },
             });
             return;
           }
 
           try {
-            const result = await tool.execute(args);
+            const result = await tool.execute(String(req.id), args);
             // MCP expects content array
-            const content = typeof result === "string"
-              ? [{ type: "text", text: result }]
-              : [{ type: "text", text: JSON.stringify(result) }];
+            const content =
+              typeof result === "string"
+                ? [{ type: "text", text: result }]
+                : [{ type: "text", text: JSON.stringify(result) }];
 
             send({
               jsonrpc: "2.0",
               id: req.id,
               result: {
                 content,
-                isError: false
-              }
+                isError: false,
+              },
             });
           } catch (err: any) {
             send({
@@ -126,8 +127,8 @@ async function main() {
               id: req.id,
               result: {
                 content: [{ type: "text", text: `Error: ${err.message}` }],
-                isError: true
-              }
+                isError: true,
+              },
             });
           }
           break;
@@ -137,7 +138,7 @@ async function main() {
           send({
             jsonrpc: "2.0",
             id: req.id,
-            result: { resources: [] }
+            result: { resources: [] },
           });
           break;
 
@@ -145,7 +146,7 @@ async function main() {
           send({
             jsonrpc: "2.0",
             id: req.id,
-            result: {}
+            result: {},
           });
           break;
 
@@ -155,7 +156,7 @@ async function main() {
             send({
               jsonrpc: "2.0",
               id: req.id,
-              error: { code: -32601, message: "Method not found" }
+              error: { code: -32601, message: "Method not found" },
             });
           }
       }
