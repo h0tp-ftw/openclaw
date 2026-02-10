@@ -22,6 +22,8 @@ import {
   writeCliImages,
   writeSystemPromptFile,
   createGeminiExtension,
+  cleanupResumeProcesses,
+  cleanupSuspendedCliProcesses,
 } from "./cli-runner/helpers.js";
 import { resolveOpenClawDocsPath } from "./docs-path.js";
 import { FailoverError, resolveFailoverStatus } from "./failover-error.js";
@@ -210,6 +212,11 @@ export async function runCliAgent(params: {
     // Ensure the MCP extension is loaded
     if (!args.includes("openclaw-tools")) {
       args.unshift("-e", "openclaw-tools");
+    }
+
+    if (useResume && resolvedCliSessionId) {
+      await cleanupSuspendedCliProcesses(backend);
+      await cleanupResumeProcesses(backend, resolvedCliSessionId);
     }
 
     // Build env: spread process.env, apply backend overrides, clear sensitive keys, add extensions
