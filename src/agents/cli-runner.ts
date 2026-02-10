@@ -220,6 +220,8 @@ export async function runCliAgent(params: {
         GEMINI_EXTENSION_PATH: extensionPayload.path,
         OPENCLAW_MCP_MODEL_PROVIDER: params.provider,
         OPENCLAW_MCP_MODEL_ID: params.model ?? "",
+        OPENCLAW_SESSION_KEY: params.sessionKey ?? params.sessionId,
+        OPENCLAW_AGENT_ID: sessionAgentId,
       };
       for (const key of backend.clearEnv ?? []) {
         delete next[key];

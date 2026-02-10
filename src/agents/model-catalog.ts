@@ -100,6 +100,67 @@ export async function loadModelCatalog(params?: {
         modelCatalogPromise = null;
       }
 
+      // Explicitly add Gemini CLI models.
+      // These are handled by the gemini-cli backend, not the standard HTTP provider logic,
+      // so they don't appear in models.json by default.
+      const geminiModels: ModelCatalogEntry[] = [
+        {
+          id: "gemini-3-pro-preview",
+          name: "Gemini 3 Pro",
+          provider: "gemini-cli",
+          contextWindow: 2097152,
+          input: ["text", "image"],
+        },
+        {
+          id: "gemini-3-flash-preview",
+          name: "Gemini 3 Flash",
+          provider: "gemini-cli",
+          contextWindow: 1048576,
+          input: ["text", "image"],
+        },
+        {
+          id: "gemini-2.5-pro",
+          name: "Gemini 2.5 Pro",
+          provider: "gemini-cli",
+          contextWindow: 2097152,
+          input: ["text", "image"],
+        },
+        {
+          id: "gemini-2.5-flash",
+          name: "Gemini 2.5 Flash",
+          provider: "gemini-cli",
+          contextWindow: 1048576,
+          input: ["text", "image"],
+        },
+        {
+          id: "gemini-2.5-flash-lite",
+          name: "Gemini 2.5 Flash Lite",
+          provider: "gemini-cli",
+          contextWindow: 1048576,
+          input: ["text", "image"],
+        },
+        {
+          id: "auto-gemini-3",
+          name: "Auto Gemini 3",
+          provider: "gemini-cli",
+          contextWindow: 2097152,
+          input: ["text", "image"],
+        },
+        {
+          id: "auto-gemini-2.5",
+          name: "Auto Gemini 2.5",
+          provider: "gemini-cli",
+          contextWindow: 2097152,
+          input: ["text", "image"],
+        },
+      ];
+
+      for (const gm of geminiModels) {
+        if (!models.some((m) => m.provider === gm.provider && m.id === gm.id)) {
+          models.push(gm);
+        }
+      }
+
       return sortModels(models);
     } catch (error) {
       if (!hasLoggedModelCatalogError) {

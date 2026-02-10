@@ -29,12 +29,20 @@ async function main() {
   const modelProvider = process.env.OPENCLAW_MCP_MODEL_PROVIDER ?? "google";
   const modelId = process.env.OPENCLAW_MCP_MODEL_ID ?? undefined;
 
+  // Accept agent context from calling CLI runner via env vars
+  const sessionKey = process.env.OPENCLAW_SESSION_KEY;
+  const agentId = process.env.OPENCLAW_AGENT_ID;
+  const agentDir = process.env.OPENCLAW_AGENT_DIR;
+
   // Initialize tools using env-driven context
   const tools = createOpenClawCodingTools({
     config,
     workspaceDir: process.cwd(),
     modelProvider,
     modelId,
+    sessionKey,
+    // Agent context
+    agentDir,
   });
 
   const toolMap = new Map(tools.map((t) => [t.name, t]));

@@ -77,20 +77,30 @@ const DEFAULT_CODEX_BACKEND: CliBackendConfig = {
 };
 
 const GEMINI_MODEL_ALIASES: Record<string, string> = {
-  pro: "gemini-2.5-pro",
-  // Standard Flash
-  flash: "gemini-2.5-flash",
-  "2.5-flash": "gemini-2.5-flash",
-  "2.0-flash": "gemini-2.0-flash",
-  // Thinking models - use these to see "thinking" events!
-  thinking: "gemini-2.0-flash-thinking-exp-1219",
-  "flash-thinking": "gemini-2.0-flash-thinking-exp-1219",
-  // Preview models
+  // Gemini 3 Preview
   "pro-3": "gemini-3-pro-preview",
   "flash-3": "gemini-3-flash-preview",
   "gemini-3-pro": "gemini-3-pro-preview",
   "gemini-3-flash": "gemini-3-flash-preview",
+
+  // Gemini 2.5
+  pro: "gemini-2.5-pro",
   "2.5-pro": "gemini-2.5-pro",
+  "gemini-2.5-pro": "gemini-2.5-pro",
+
+  flash: "gemini-2.5-flash",
+  "2.5-flash": "gemini-2.5-flash",
+  "gemini-2.5-flash": "gemini-2.5-flash",
+
+  lite: "gemini-2.5-flash-lite",
+  "flash-lite": "gemini-2.5-flash-lite",
+  "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+
+  // Auto Selectors
+  "auto-3": "auto-gemini-3",
+  "auto-gemini-3": "auto-gemini-3",
+  "auto-2.5": "auto-gemini-2.5",
+  "auto-gemini-2.5": "auto-gemini-2.5",
 };
 
 const DEFAULT_GEMINI_BACKEND: CliBackendConfig = {
