@@ -94,7 +94,18 @@ async function main() {
         }
 
         case "tools/call": {
-          const { name, arguments: args } = req.params;
+          const params = req.params || {};
+          const { name, arguments: args } = params;
+
+          if (!name) {
+            send({
+              jsonrpc: "2.0",
+              id: req.id,
+              error: { code: -32602, message: "Invalid params: 'name' is required" },
+            });
+            return;
+          }
+
           const tool = toolMap.get(name);
           if (!tool) {
             send({

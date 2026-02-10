@@ -62,23 +62,6 @@ export async function createGeminiExtension(): Promise<{
     name: "openclaw-tools",
     version: "1.0.0",
     description: "OpenClaw Tools for Gemini CLI",
-    excludeTools: [
-      "read_file",
-      "read_many_files",
-      "write_file",
-      "edit",
-      "replace",
-      "list_dir",
-      "search_filesystem",
-      "search_files",
-      "run_shell_command",
-      "web_fetch",
-      "web_search",
-      "google_web_search",
-      "save_memory",
-      "write_todos",
-      "activate_skill",
-    ],
     mcpServers: {
       openclaw: {
         command,
