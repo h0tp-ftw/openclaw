@@ -89,10 +89,13 @@ const GEMINI_MODEL_ALIASES: Record<string, string> = {
 
 const DEFAULT_GEMINI_BACKEND: CliBackendConfig = {
   command: "gemini",
-  args: ["-p", "--output-format", "json", "--yolo"],
-  streamingArgs: ["-p", "--output-format", "stream-json", "--yolo"],
-  output: "json",
+  // Use jsonl streaming format even for non-streaming calls, so we can parse it reliably
+  // (the default json format is pretty-printed and breaks jsonl parsing)
+  args: ["--output-format", "stream-json", "--yolo"],
+  streamingArgs: ["--output-format", "stream-json", "--yolo"],
+  output: "jsonl",
   input: "arg",
+  promptArg: "-p",
   modelArg: "-m",
   modelAliases: GEMINI_MODEL_ALIASES,
   sessionMode: "none",

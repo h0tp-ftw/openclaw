@@ -1,3 +1,4 @@
+import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
@@ -7,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { CliBackendConfig } from "../../config/types.js";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";
 import { runExec } from "../../process/exec.js";
 import { buildTtsSystemPromptHint } from "../../tts/tts.js";
@@ -33,7 +33,10 @@ export async function writeSystemPromptFile(
   return { path: promptFile, cleanup };
 }
 
-export async function createGeminiExtension(): Promise<{ path: string; cleanup: () => Promise<void> }> {
+export async function createGeminiExtension(): Promise<{
+  path: string;
+  cleanup: () => Promise<void>;
+}> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-gemini-ext-"));
   const extensionJsonPath = path.join(tempDir, "gemini-extension.json");
 
@@ -60,18 +63,29 @@ export async function createGeminiExtension(): Promise<{ path: string; cleanup: 
     version: "1.0.0",
     description: "OpenClaw Tools for Gemini CLI",
     excludeTools: [
-      "read_file", "read_many_files", "write_file", "edit",
-      "replace", "list_dir", "search_filesystem", "search_files",
-      "run_shell_command", "web_fetch", "web_search", "google_web_search",
-      "save_memory", "write_todos", "activate_skill"
+      "read_file",
+      "read_many_files",
+      "write_file",
+      "edit",
+      "replace",
+      "list_dir",
+      "search_filesystem",
+      "search_files",
+      "run_shell_command",
+      "web_fetch",
+      "web_search",
+      "google_web_search",
+      "save_memory",
+      "write_todos",
+      "activate_skill",
     ],
     mcpServers: {
       openclaw: {
         command,
         args,
         cwd: process.cwd(),
-      }
-    }
+      },
+    },
   };
 
   await fs.writeFile(extensionJsonPath, JSON.stringify(manifest, null, 2), "utf-8");
@@ -82,8 +96,6 @@ export async function createGeminiExtension(): Promise<{ path: string; cleanup: 
 
   return { path: tempDir, cleanup };
 }
-
-
 
 const CLI_RUN_QUEUE = new Map<string, Promise<unknown>>();
 
@@ -263,8 +275,6 @@ function buildModelAliasLines(cfg?: OpenClawConfig) {
     .map((entry) => `- ${entry.alias}: ${entry.model}`);
 }
 
-
-
 export function buildSystemPrompt(params: {
   workspaceDir: string;
   config?: OpenClawConfig;
@@ -339,10 +349,13 @@ export function normalizeCliModel(modelId: string, backend: CliBackendConfig): s
 function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
   const pick = (key: string) =>
     typeof raw[key] === "number" && raw[key] > 0 ? raw[key] : undefined;
-  const input = pick("input_tokens") ?? pick("inputTokens")
-    ?? pick("prompt_tokens") ?? pick("promptTokens");
-  const output = pick("output_tokens") ?? pick("outputTokens")
-    ?? pick("candidates_tokens") ?? pick("candidatesTokens");
+  const input =
+    pick("input_tokens") ?? pick("inputTokens") ?? pick("prompt_tokens") ?? pick("promptTokens");
+  const output =
+    pick("output_tokens") ??
+    pick("outputTokens") ??
+    pick("candidates_tokens") ??
+    pick("candidatesTokens");
   const cacheRead =
     pick("cache_read_input_tokens") ?? pick("cached_input_tokens") ?? pick("cacheRead");
   const cacheWrite = pick("cache_write_input_tokens") ?? pick("cacheWrite");
@@ -469,6 +482,26 @@ export function parseCliJsonl(raw: string, backend: CliBackendConfig): CliOutput
       const type = typeof item.type === "string" ? item.type.toLowerCase() : "";
       if (!type || type.includes("message")) {
         texts.push(item.text);
+      }
+    }
+    // Gemini message format
+    if (
+      parsed.type === "message" &&
+      parsed.role === "assistant" &&
+      (typeof parsed.content === "string" || typeof parsed.text === "string")
+    ) {
+      // Accumulate deltas without newline separation
+      let content = "";
+      if (typeof parsed.content === "string") {
+        content = parsed.content;
+      } else if (typeof parsed.text === "string") {
+        content = parsed.text;
+      }
+
+      if (texts.length > 0 && typeof parsed.delta === "boolean" && parsed.delta) {
+        texts[texts.length - 1] += content;
+      } else {
+        texts.push(content);
       }
     }
   }

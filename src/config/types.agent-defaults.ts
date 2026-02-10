@@ -61,6 +61,8 @@ export type CliBackendConfig = {
   resumeOutput?: "json" | "text" | "jsonl";
   /** Prompt input mode (default: arg). */
   input?: "arg" | "stdin";
+  /** Flag used to pass the prompt as an argument (e.g. -p). If set, input defaults to "arg" and this flag is used. */
+  promptArg?: string;
   /** Max prompt length for arg mode (if exceeded, stdin is used). */
   maxPromptArgChars?: number;
   /** Extra env vars injected for this CLI. */
