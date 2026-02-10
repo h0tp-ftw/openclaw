@@ -59,32 +59,44 @@ export async function loadModelCatalog(params?: {
         }
         return a.name.localeCompare(b.name);
       });
+
+    let cfg = params?.config;
+    if (!cfg) {
+      try {
+        cfg = (await import("../config/config.js")).loadConfig();
+      } catch {
+        // Fallback or ignore
+      }
+    }
+
     try {
-      const cfg = params?.config ?? loadConfig();
-      await ensureOpenClawModelsJson(cfg);
+      if (cfg) {
+        await ensureOpenClawModelsJson(cfg);
+      }
+
       // IMPORTANT: keep the dynamic import *inside* the try/catch.
-      // If this fails once (e.g. during a pnpm install that temporarily swaps node_modules),
-      // we must not poison the cache with a rejected promise (otherwise all channel handlers
-      // will keep failing until restart).
       const piSdk = await importPiSdk();
       const agentDir = resolveOpenClawAgentDir();
       const { join } = await import("node:path");
-      const authStorage = new piSdk.AuthStorage(join(agentDir, "auth.json"));
-      const registry = new piSdk.ModelRegistry(authStorage, join(agentDir, "models.json")) as
-        | {
-            getAll: () => Array<DiscoveredModel>;
-          }
-        | Array<DiscoveredModel>;
-      const entries = Array.isArray(registry) ? registry : registry.getAll();
-      for (const entry of entries) {
+
+      let registryItems: Array<DiscoveredModel> = [];
+      try {
+        const authStorage = new piSdk.AuthStorage(join(agentDir, "auth.json"));
+        const registry = new piSdk.ModelRegistry(authStorage, join(agentDir, "models.json")) as
+          | {
+              getAll: () => Array<DiscoveredModel>;
+            }
+          | Array<DiscoveredModel>;
+        registryItems = Array.isArray(registry) ? registry : registry.getAll();
+      } catch (e) {
+        // Ignore registry load errors, proceed with empty or partial
+      }
+
+      for (const entry of registryItems) {
         const id = String(entry?.id ?? "").trim();
-        if (!id) {
-          continue;
-        }
+        if (!id) continue;
         const provider = String(entry?.provider ?? "").trim();
-        if (!provider) {
-          continue;
-        }
+        if (!provider) continue;
         const name = String(entry?.name ?? id).trim() || id;
         const contextWindow =
           typeof entry?.contextWindow === "number" && entry.contextWindow > 0
@@ -96,13 +108,10 @@ export async function loadModelCatalog(params?: {
       }
 
       if (models.length === 0) {
-        // If we found nothing, don't cache this result so we can try again.
         modelCatalogPromise = null;
       }
 
-      // Explicitly add Gemini CLI models.
-      // These are handled by the gemini-cli backend, not the standard HTTP provider logic,
-      // so they don't appear in models.json by default.
+      // Explicitly add Gemini CLI models requested by user
       const geminiModels: ModelCatalogEntry[] = [
         {
           id: "gemini-3-pro-preview",
@@ -161,14 +170,31 @@ export async function loadModelCatalog(params?: {
         }
       }
 
+      if (cfg?.agents?.defaults?.cliMode) {
+        const { isCliProvider } = await import("./model-selection.js");
+        const filtered = models.filter((m) => isCliProvider(m.provider, cfg));
+        return sortModels(filtered);
+      }
+
       return sortModels(models);
     } catch (error) {
       if (!hasLoggedModelCatalogError) {
         hasLoggedModelCatalogError = true;
         console.warn(`[model-catalog] Failed to load model catalog: ${String(error)}`);
       }
-      // Don't poison the cache on transient dependency/filesystem issues.
       modelCatalogPromise = null;
+
+      // Attempt to filter even on failure if we have models
+      if (cfg?.agents?.defaults?.cliMode && models.length > 0) {
+        try {
+          const { isCliProvider } = await import("./model-selection.js");
+          const filtered = models.filter((m) => isCliProvider(m.provider, cfg));
+          return sortModels(filtered);
+        } catch {
+          // ignore import error
+        }
+      }
+
       if (models.length > 0) {
         return sortModels(models);
       }
