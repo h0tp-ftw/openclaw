@@ -1,0 +1,39 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Runs daily at midnight
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for all branches and tags
+
+      - name: Sync Upstream
+        run: |
+          # 1. Configure git
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+
+          # 2. Add upstream remote
+          git remote add upstream https://github.com/openclaw/openclaw.git
+          git fetch upstream main
+
+          # 3. Check if we are already up to date
+          if git merge-base --is-ancestor upstream/main main; then
+            echo "Already up to date with upstream/main."
+            exit 0
+          fi
+
+          # 4. Attempt to merge upstream/main into main
+          # --no-edit avoids the merge commit message prompt
+          # If this fails (conflicts), the step will fail
+          git merge upstream/main --no-edit
+
+          # 5. Push changes back to origin (your fork)
+          git push origin main
