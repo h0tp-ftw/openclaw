@@ -99,31 +99,9 @@ export async function runAgentTurnWithFallback(params: {
   let fallbackProvider = params.followupRun.run.provider;
   let fallbackModel = params.followupRun.run.model;
   let didResetAfterCompactionFailure = false;
-  // Safety limits to prevent infinite loops or excessively long runs
-  const startedAt = Date.now();
-  // Use the configured timeout (default ~10m) as the total time limit for the entire multi-turn run
-  const totalTimeoutMs = Math.max(params.followupRun.run.timeoutMs, 60_000);
-  let loopCount = 0;
-  const MAX_LOOP_COUNT = 25;
   let didRetryTransientHttpError = false;
 
   while (true) {
-    if (Date.now() - startedAt > totalTimeoutMs) {
-      return {
-        kind: "final",
-        payload: {
-          text: `⚠️ I had to stop because this request took too long (>${Math.round(totalTimeoutMs / 1000 / 60)}m). Please try again with a simpler request.`,
-        },
-      };
-    }
-    if (loopCount++ >= MAX_LOOP_COUNT) {
-      return {
-        kind: "final",
-        payload: {
-          text: `⚠️ I had to stop because this request exceeded the maximum number of steps (${MAX_LOOP_COUNT}). Please try again with a simpler request.`,
-        },
-      };
-    }
     try {
       const allowPartialStream = !(
         params.followupRun.run.reasoningLevel === "stream" && params.opts?.onReasoningStream
