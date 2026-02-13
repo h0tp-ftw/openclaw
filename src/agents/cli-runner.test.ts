@@ -274,7 +274,7 @@ describe("runCliAgent error handling", () => {
         sessionFile: "/tmp/session.jsonl",
         workspaceDir: "/tmp",
         prompt: "hi",
-        provider: "gemini-cli",
+        provider: "headless-gemini-cli",
         model: "gemini-pro",
         timeoutMs: 1000,
         runId: "run-1",
@@ -297,7 +297,7 @@ describe("runCliAgent error handling", () => {
       sessionFile: "/tmp/session.jsonl",
       workspaceDir: "/tmp",
       prompt: "hi",
-      provider: "gemini-cli",
+      provider: "headless-gemini-cli",
       model: "gemini-pro",
       timeoutMs: 1000,
       runId: "run-1",
@@ -307,7 +307,7 @@ describe("runCliAgent error handling", () => {
     expect(result).toHaveProperty("meta");
     expect(result).toHaveProperty("meta.durationMs");
     expect(result).toHaveProperty("meta.agentMeta");
-    expect(result.meta.agentMeta?.provider).toBe("gemini-cli");
+    expect(result.meta.agentMeta?.provider).toBe("headless-gemini-cli");
     expect(result.payloads?.[0]?.text).toContain("Hello world");
   });
 });

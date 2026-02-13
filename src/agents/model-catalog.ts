@@ -94,9 +94,13 @@ export async function loadModelCatalog(params?: {
 
       for (const entry of registryItems) {
         const id = String(entry?.id ?? "").trim();
-        if (!id) continue;
+        if (!id) {
+          continue;
+        }
         const provider = String(entry?.provider ?? "").trim();
-        if (!provider) continue;
+        if (!provider) {
+          continue;
+        }
         const name = String(entry?.name ?? id).trim() || id;
         const contextWindow =
           typeof entry?.contextWindow === "number" && entry.contextWindow > 0
@@ -116,49 +120,49 @@ export async function loadModelCatalog(params?: {
         {
           id: "gemini-3-pro-preview",
           name: "Gemini 3 Pro",
-          provider: "gemini-cli",
+          provider: "headless-gemini-cli",
           contextWindow: 2097152,
           input: ["text", "image"],
         },
         {
           id: "gemini-3-flash-preview",
           name: "Gemini 3 Flash",
-          provider: "gemini-cli",
+          provider: "headless-gemini-cli",
           contextWindow: 1048576,
           input: ["text", "image"],
         },
         {
           id: "gemini-2.5-pro",
           name: "Gemini 2.5 Pro",
-          provider: "gemini-cli",
+          provider: "headless-gemini-cli",
           contextWindow: 2097152,
           input: ["text", "image"],
         },
         {
           id: "gemini-2.5-flash",
           name: "Gemini 2.5 Flash",
-          provider: "gemini-cli",
+          provider: "headless-gemini-cli",
           contextWindow: 1048576,
           input: ["text", "image"],
         },
         {
           id: "gemini-2.5-flash-lite",
           name: "Gemini 2.5 Flash Lite",
-          provider: "gemini-cli",
+          provider: "headless-gemini-cli",
           contextWindow: 1048576,
           input: ["text", "image"],
         },
         {
           id: "auto-gemini-3",
           name: "Auto Gemini 3",
-          provider: "gemini-cli",
+          provider: "headless-gemini-cli",
           contextWindow: 2097152,
           input: ["text", "image"],
         },
         {
           id: "auto-gemini-2.5",
           name: "Auto Gemini 2.5",
-          provider: "gemini-cli",
+          provider: "headless-gemini-cli",
           contextWindow: 2097152,
           input: ["text", "image"],
         },

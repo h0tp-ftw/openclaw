@@ -22,7 +22,7 @@ describe("sanitizeToolsForGoogle", () => {
 
     const [sanitized] = sanitizeToolsForGoogle({
       tools: [tool],
-      provider: "google-gemini-cli",
+      provider: "google-headless-gemini-cli",
     });
 
     const params = sanitized.parameters as {

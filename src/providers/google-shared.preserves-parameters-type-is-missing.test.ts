@@ -30,19 +30,19 @@ const makeModel = (id: string): Model<"google-generative-ai"> =>
     maxTokens: 1,
   }) as Model<"google-generative-ai">;
 
-const _makeGeminiCliModel = (id: string): Model<"google-gemini-cli"> =>
+const _makeGeminiCliModel = (id: string): Model<"google-headless-gemini-cli"> =>
   ({
     id,
     name: id,
-    api: "google-gemini-cli",
-    provider: "google-gemini-cli",
+    api: "google-headless-gemini-cli",
+    provider: "google-headless-gemini-cli",
     baseUrl: "https://example.invalid",
     reasoning: false,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 1,
     maxTokens: 1,
-  }) as Model<"google-gemini-cli">;
+  }) as Model<"google-headless-gemini-cli">;
 
 describe("google-shared convertTools", () => {
   it("preserves parameters when type is missing", () => {

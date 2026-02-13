@@ -212,7 +212,7 @@ describe("resolveModel", () => {
       id: "claude-opus-4-5-thinking",
       name: "Claude Opus 4.5 Thinking",
       provider: "google-antigravity",
-      api: "google-gemini-cli",
+      api: "google-headless-gemini-cli",
       baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
       reasoning: true,
       input: ["text", "image"] as const,
@@ -236,7 +236,7 @@ describe("resolveModel", () => {
     expect(result.model).toMatchObject({
       provider: "google-antigravity",
       id: "claude-opus-4-6-thinking",
-      api: "google-gemini-cli",
+      api: "google-headless-gemini-cli",
       baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
       reasoning: true,
     });

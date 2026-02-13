@@ -23,19 +23,19 @@ const makeModel = (id: string): Model<"google-generative-ai"> =>
     maxTokens: 1,
   }) as Model<"google-generative-ai">;
 
-const makeGeminiCliModel = (id: string): Model<"google-gemini-cli"> =>
+const makeGeminiCliModel = (id: string): Model<"google-headless-gemini-cli"> =>
   ({
     id,
     name: id,
-    api: "google-gemini-cli",
-    provider: "google-gemini-cli",
+    api: "google-headless-gemini-cli",
+    provider: "google-headless-gemini-cli",
     baseUrl: "https://example.invalid",
     reasoning: false,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 1,
     maxTokens: 1,
-  }) as Model<"google-gemini-cli">;
+  }) as Model<"google-headless-gemini-cli">;
 
 describe("google-shared convertTools", () => {
   it("ensures function call comes after user turn, not after model turn", () => {
@@ -114,7 +114,7 @@ describe("google-shared convertTools", () => {
     expect(toolCall.functionCall).toBeTruthy();
   });
 
-  it("strips tool call and response ids for google-gemini-cli", () => {
+  it("strips tool call and response ids for google-headless-gemini-cli", () => {
     const model = makeGeminiCliModel("gemini-3-flash");
     const context = {
       messages: [
@@ -133,8 +133,8 @@ describe("google-shared convertTools", () => {
               thoughtSignature: "dGVzdA==",
             },
           ],
-          api: "google-gemini-cli",
-          provider: "google-gemini-cli",
+          api: "google-headless-gemini-cli",
+          provider: "google-headless-gemini-cli",
           model: "gemini-3-flash",
           usage: {
             input: 0,

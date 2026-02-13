@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { runCliAgent } from "./cli-runner.js";
 import { runCommandWithTimeout } from "../process/exec.js";
+import { runCliAgent } from "./cli-runner.js";
 
 vi.mock("../process/exec.js", () => ({
   runCommandWithTimeout: vi.fn(),
@@ -49,7 +49,9 @@ describe("runCliAgent streaming", () => {
         opts.onStdout('{"type": "thinking", "content": "Thinking about it..."}\n');
         opts.onStdout('{"type": "text", "content": "The answer is "}\n');
         opts.onStdout('{"type": "text", "content": "42."}\n');
-        opts.onStdout('{"type": "event", "stream": "tool", "data": {"phase": "start", "tool": "calc"}}\n');
+        opts.onStdout(
+          '{"type": "event", "stream": "tool", "data": {"phase": "start", "tool": "calc"}}\n',
+        );
       }
       return {
         stdout: '{"type": "text", "content": "The answer is 42."}', // Simplified for test
@@ -65,7 +67,7 @@ describe("runCliAgent streaming", () => {
       sessionFile: "/tmp/session.jsonl",
       workspaceDir: "/tmp",
       prompt: "hi",
-      provider: "gemini-cli",
+      provider: "headless-gemini-cli",
       timeoutMs: 1000,
       runId: "run-1",
       onPartialReply,
@@ -75,9 +77,9 @@ describe("runCliAgent streaming", () => {
 
     // Verify reasoning
     expect(onReasoningStream).toHaveBeenCalledWith({ text: "Thinking about it..." });
-    expect(onAgentEvent).toHaveBeenCalledWith({ 
-      stream: "reasoning", 
-      data: { text: "Thinking about it...", delta: "Thinking about it..." } 
+    expect(onAgentEvent).toHaveBeenCalledWith({
+      stream: "reasoning",
+      data: { text: "Thinking about it...", delta: "Thinking about it..." },
     });
 
     // Verify partial replies (deltas)
@@ -85,19 +87,19 @@ describe("runCliAgent streaming", () => {
     expect(onPartialReply).toHaveBeenCalledWith({ text: "42." });
 
     // Verify assistant events (accumulated + delta)
-    expect(onAgentEvent).toHaveBeenCalledWith({ 
-      stream: "assistant", 
-      data: { text: "The answer is ", delta: "The answer is " } 
+    expect(onAgentEvent).toHaveBeenCalledWith({
+      stream: "assistant",
+      data: { text: "The answer is ", delta: "The answer is " },
     });
-    expect(onAgentEvent).toHaveBeenCalledWith({ 
-      stream: "assistant", 
-      data: { text: "The answer is 42.", delta: "42." } 
+    expect(onAgentEvent).toHaveBeenCalledWith({
+      stream: "assistant",
+      data: { text: "The answer is 42.", delta: "42." },
     });
 
     // Verify custom events
-    expect(onAgentEvent).toHaveBeenCalledWith({ 
-      stream: "tool", 
-      data: { phase: "start", tool: "calc" } 
+    expect(onAgentEvent).toHaveBeenCalledWith({
+      stream: "tool",
+      data: { phase: "start", tool: "calc" },
     });
   });
 
@@ -115,7 +117,7 @@ describe("runCliAgent streaming", () => {
       sessionFile: "/tmp/session.jsonl",
       workspaceDir: "/tmp",
       prompt: "hi",
-      provider: "gemini-cli",
+      provider: "headless-gemini-cli",
       timeoutMs: 1000,
       runId: "run-2",
       onPartialReply: () => {},

@@ -4,7 +4,6 @@ import type { OpenClawConfig } from "../config/config.js";
 import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
 import { resolveHeartbeatPrompt } from "../auto-reply/heartbeat.js";
 import { shouldLogVerbose } from "../globals.js";
-import { isTruthyEnvValue } from "../infra/env.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { resolveSessionAgentIds } from "./agent-scope.js";
@@ -87,19 +86,6 @@ export async function runCliAgent(params: {
     config: params.config,
   });
 
-  const tools = createOpenClawCodingTools({
-    config: params.config,
-    sessionKey: params.sessionKey,
-    workspaceDir,
-    modelProvider: params.provider,
-    modelId: params.model,
-    // Provide a minimal sandbox context if available, otherwise undefined
-    // For CLI runner, we might need to resolve sandbox if we want sandboxed tools.
-    // Assuming local execution for now as per MVP.
-    // We don't inject tools via XML anymore for native MCP interaction
-    // But we might still want them for reference if we need them, though
-    // createGeminiExtension handles the tool definitions internally via MCP server.
-  });
   // const toolsXml = formatToolsForGeminiXml(tools);
 
   const heartbeatPrompt =
@@ -195,7 +181,7 @@ export async function runCliAgent(params: {
     const args = buildCliArgs({
       backend,
       baseArgs: useResume
-        ? baseArgs.map((arg) => arg.replaceAll("{sessionId}", resolvedCliSessionId!))
+        ? baseArgs.map((arg) => arg.replaceAll("{sessionId}", resolvedCliSessionId))
         : baseArgs,
       modelId: normalizedModel,
       sessionId: resolvedCliSessionId,

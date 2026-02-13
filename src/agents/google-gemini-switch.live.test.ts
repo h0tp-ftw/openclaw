@@ -32,7 +32,7 @@ describeLive("gemini live switch", () => {
                 // No thoughtSignature: simulates Claude via Antigravity.
               },
             ],
-            api: "google-gemini-cli",
+            api: "google-headless-gemini-cli",
             provider: "google-antigravity",
             model: "claude-sonnet-4-20250514",
             usage: {

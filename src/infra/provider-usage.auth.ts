@@ -191,7 +191,10 @@ async function resolveOAuthToken(params: {
         continue;
       }
       let token = resolved.apiKey;
-      if (params.provider === "google-gemini-cli" || params.provider === "google-antigravity") {
+      if (
+        params.provider === "google-headless-gemini-cli" ||
+        params.provider === "google-antigravity"
+      ) {
         const parsed = parseGoogleToken(resolved.apiKey);
         token = parsed?.token ?? resolved.apiKey;
       }
@@ -219,7 +222,7 @@ function resolveOAuthProviders(agentDir?: string): UsageProviderId[] {
   const providers = [
     "anthropic",
     "github-copilot",
-    "google-gemini-cli",
+    "google-headless-gemini-cli",
     "google-antigravity",
     "openai-codex",
   ] satisfies UsageProviderId[];
