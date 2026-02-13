@@ -20,6 +20,10 @@ const PREFERRED_PROVIDER_BY_AUTH_CHOICE: Partial<Record<AuthChoice, string>> = {
   "google-antigravity": "google-antigravity",
   "google-gemini-cli": "google-gemini-cli",
   "zai-api-key": "zai",
+  "zai-coding-global": "zai",
+  "zai-coding-cn": "zai",
+  "zai-global": "zai",
+  "zai-cn": "zai",
   "xiaomi-api-key": "xiaomi",
   "synthetic-api-key": "synthetic",
   "venice-api-key": "venice",
@@ -32,9 +36,11 @@ const PREFERRED_PROVIDER_BY_AUTH_CHOICE: Partial<Record<AuthChoice, string>> = {
   minimax: "lmstudio",
   "opencode-zen": "opencode",
   "xai-api-key": "xai",
+  "litellm-api-key": "litellm",
   "qwen-portal": "qwen-portal",
   "minimax-portal": "minimax-portal",
   "qianfan-api-key": "qianfan",
+  "custom-api-key": "custom",
 };
 
 export function resolvePreferredProviderForAuthChoice(choice: AuthChoice): string | undefined {
