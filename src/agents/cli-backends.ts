@@ -162,7 +162,7 @@ export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
   const ids = new Set<string>([
     normalizeBackendKey("claude-cli"),
     normalizeBackendKey("codex-cli"),
-    normalizeBackendKey("gemini-cli"),
+    normalizeBackendKey("gemini-cli-headless"),
   ]);
   const configured = cfg?.agents?.defaults?.cliBackends ?? {};
   for (const key of Object.keys(configured)) {
@@ -195,7 +195,7 @@ export function resolveCliBackendConfig(
     }
     return { id: normalized, config: { ...merged, command } };
   }
-  if (normalized === "gemini-cli") {
+  if (normalized === "gemini-cli-headless") {
     const merged = mergeBackendConfig(DEFAULT_GEMINI_BACKEND, override);
     const command = merged.command?.trim();
     if (!command) {

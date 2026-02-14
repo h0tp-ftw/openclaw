@@ -55,7 +55,7 @@ export function isCliProvider(provider: string, cfg?: OpenClawConfig): boolean {
   if (normalized === "codex-cli") {
     return true;
   }
-  if (normalized === "gemini-cli") {
+  if (normalized === "gemini-cli-headless") {
     return true;
   }
   const backends = cfg?.agents?.defaults?.cliBackends ?? {};
