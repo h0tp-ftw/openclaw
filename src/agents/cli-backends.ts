@@ -112,6 +112,10 @@ const DEFAULT_GEMINI_BACKEND: CliBackendConfig = {
   // Resume args: when a previous Gemini CLI session exists, use --resume to continue
   // the conversation. The model and prompt flags are still appended by buildCliArgs.
   resumeArgs: ["--output-format", "stream-json", "--yolo", "--resume", "{sessionId}"],
+  env: {
+    GEMINI_TELEMETRY_ENABLED: "false",
+    GEMINI_TELEMETRY_LOG_PROMPTS: "false",
+  },
   output: "jsonl",
   input: "arg",
   promptArg: "-p",
