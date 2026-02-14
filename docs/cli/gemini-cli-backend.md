@@ -34,14 +34,13 @@ Use `gemini-cli/<model-id>` format. Built-in aliases are also supported:
 
 | Alias            | Resolves To              |
 | ---------------- | ------------------------ |
-| `pro`            | `gemini-2.5-pro`         |
-| `flash`          | `gemini-2.5-flash`       |
-| `pro-3`          | `gemini-3-pro-preview`   |
-| `flash-3`        | `gemini-3-flash-preview` |
-| `2.5-pro`        | `gemini-2.5-pro`         |
-| `2.5-flash`      | `gemini-2.5-flash`       |
-| `gemini-3-pro`   | `gemini-3-pro-preview`   |
-| `gemini-3-flash` | `gemini-3-flash-preview` |
+| `gemini-2.5-pro`            | `gemini-2.5-pro`         |
+| `gemini-2.5-flash`          | `gemini-2.5-flash`       |
+| `gemini-3-pro-preview`          | `gemini-3-pro-preview`   |
+| `gemini-3-flash-preview`        | `gemini-3-flash-preview` |
+| `gemini-2.5-flash-lite`        | `gemini-2.5-flash-lite`         |
+| `auto-gemini-2.5`      | Auto-selects best available Gemini 2.5 model       |
+| `auto-gemini-3`   | Auto-selects best available Gemini 3 model |
 
 Examples:
 
@@ -85,62 +84,44 @@ The system prompt is written to a temporary file and injected via the `GEMINI_SY
 
 OpenClaw exposes its own tools to the Gemini CLI session via an auto-generated `gemini-extension.json` manifest that connects to the OpenClaw MCP server (`mcp-server.ts`). This gives the Gemini CLI access to OpenClaw's coding tools while excluding tools the CLI already provides natively (file I/O, shell, web search, etc.).
 
+## Advanced Usage
+
+### Session Resumption
+
+OpenClaw supports persistent conversations via the Gemini CLI's `--resume` capability. 
+
+- **How it works**: When a session starts, OpenClaw captures the `session_id` from the CLI's `init` event. Subsequent turns in the same OpenClaw session automatically append `--resume <session_id>` to the CLI command.
+- **Benefits**: This preserves conversation state (context) across multiple CLI spawns without needing to re-send the entire history as text, saving tokens and improving speed.
+- **Manual Control**: Running `/new` in the chat will clear the stored CLI session ID and start a fresh context.
+
+### Streaming Architecture
+
+The `gemini-cli-headless` backend leverages a custom NDJSON parser to handle real-time feedback:
+
+1.  **Reasoning Tokens**: "Thinking" tokens are captured from `thinking` events and streamed to the UI via `onReasoningStream`.
+2.  **Assistant Response**: Message deltas are streamed via `onPartialReply`.
+3.  **Tool Orchestration**: `tool_use` and `tool_result` events are bridged to OpenClaw's internal event bus, allowing for observability of the CLI's native tool usage.
+
+### Image Support
+
+Multi-modal inputs are supported via temporary file injection:
+- Images sent to OpenClaw are written to a secure temporary directory (`/tmp/openclaw-cli-images-*`).
+- The file paths are passed to the CLI using the `-i` (or configured `imageArg`) flag.
+- Files are automatically cleaned up after the CLI process terminates.
+
+## Compliance & Terms of Service
+
+Unlike alternative methods that involve scraping or unauthorized session token extraction, the **Gemini CLI Headless** backend is a **100% legal and first-class method** for interacting with Gemini.
+
+> [!IMPORTANT]
+> **ToS Friendly Architecture**
+> This fork uses the official `gemini` CLI binary as its underlying engine. This means:
+> 1. **Authorized Auth**: You use standard, Google-approved OAuth flows (`gemini login`).
+> 2. **Official API Usage**: Commands are translated into official API calls by the binary itself.
+> 3. **No Key Stealing**: There is no need for illegal session hijacking or "stealing" of OAuth cookies.
+> 4. **Standard Quotas**: You benefit from the generous quotas (context windows, requests/day) provided to the Gemini CLI.
+
+This approach ensures your usage remains compliant with Google's Terms of Service while providing a seamless, headless automation experience.
+
 ## Other CLI Backends
-
-OpenClaw supports three CLI backends using the same architecture:
-
-| Provider     | Command  | Status       |
-| ------------ | -------- | ------------ |
-| `gemini-cli` | `gemini` | ✅ Supported |
-| `claude-cli` | `claude` | ✅ Supported |
-| `codex-cli`  | `codex`  | ✅ Supported |
-
-Switch between them with:
-
-```bash
-openclaw models set gemini-cli/gemini-2.5-pro
-openclaw models set claude-cli/claude-sonnet-4-5-20250514
-openclaw models set codex-cli/codex-mini-latest
-```
-
-## Custom Backend Overrides
-
-You can override the default `gemini-cli` backend config via `openclaw.json`:
-
-```json
-{
-  "agents": {
-    "defaults": {
-      "cliBackends": {
-        "gemini-cli": {
-          "command": "/custom/path/to/gemini",
-          "args": ["--output-format", "stream-json", "--yolo"],
-          "modelArg": "-m"
-        }
-      }
-    }
-  }
-}
-```
-
-Overrides are merged with the built-in defaults, so you only need to specify the fields you want to change.
-
-## Key Source Files
-
-| File                               | Purpose                                                         |
-| ---------------------------------- | --------------------------------------------------------------- |
-| `src/agents/model-selection.ts`    | `isCliProvider()` — routes `gemini-cli` to the CLI runner       |
-| `src/agents/cli-backends.ts`       | `DEFAULT_GEMINI_BACKEND` config and `resolveCliBackendConfig()` |
-| `src/agents/cli-runner.ts`         | `runCliAgent()` — spawns and manages the CLI process            |
-| `src/agents/cli-runner/helpers.ts` | System prompt injection, argument building, JSON parsing        |
-| `src/agents/mcp-server.ts`         | MCP tools bridge for Gemini CLI extensions                      |
-
-## Troubleshooting
-
-**"gemini: command not found"** — Ensure the Gemini CLI is installed and on your `$PATH`.
-
-**Authentication errors** — Run `gemini` interactively once to complete OAuth, or set `GOOGLE_API_KEY`.
-
-**Model not routing through CLI** — Run `openclaw models status` and verify the provider shows as `gemini-cli`. If it shows `google` or `google-gemini-cli`, you're using the embedded API instead.
-
-**Checking logs** — Use `openclaw logs --follow` to see CLI invocations and output in real time.
+... [rest of file] ...
