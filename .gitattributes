@@ -1,2 +1,4 @@
 * text=auto eol=lf
 README.md merge=ours
+install.sh merge=ours
+install.sh merge=ours
