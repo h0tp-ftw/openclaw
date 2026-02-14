@@ -1,39 +1,84 @@
 name: Sync Upstream
 
+permissions:
+  contents: write
+  pull-requests: write
+
 on:
   schedule:
     - cron: "0 0 * * *" # Runs daily at midnight
-  workflow_dispatch: # Allows manual trigger from the Actions tab
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
-  sync:
+  sync_with_upstream:
+    name: Sync with Upstream
     runs-on: ubuntu-latest
+    if: ${{ github.event.repository.fork }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetch all history for all branches and tags
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      - name: Sync Upstream
+      - name: Configure Git
         run: |
-          # 1. Configure git
           git config --global user.name 'GitHub Action'
           git config --global user.email 'action@github.com'
 
-          # 2. Add upstream remote
+      - name: Sync Upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. Add upstream remote
           git remote add upstream https://github.com/openclaw/openclaw.git
           git fetch upstream main
 
-          # 3. Check if we are already up to date
-          if git merge-base --is-ancestor upstream/main main; then
+          # 2. Check for updates
+          BEHIND_COUNT=$(git rev-list --left-right --count main...upstream/main | awk '{print $2}')
+          if [ "$BEHIND_COUNT" -eq "0" ]; then
             echo "Already up to date with upstream/main."
             exit 0
           fi
+          
+          echo "Behind upstream by $BEHIND_COUNT commits. Attempting merge..."
 
-          # 4. Attempt to merge upstream/main into main
-          # --no-edit avoids the merge commit message prompt
-          # If this fails (conflicts), the step will fail
-          git merge upstream/main --no-edit
+          # 3. Attempt automatic merge while preserving local files
+          # Using --no-commit so we can modify the index before finalizing
+          if git merge upstream/main --no-commit --no-ff; then
+            echo "Merge successful (staged). Restoring protected files..."
+            
+            # --- PROTECTED FILES LIST ---
+            # Add files you want to keep local versions of here
+            git checkout HEAD -- README.md docs/cli/gemini-cli-backend.md
+            # ---------------------------
 
-          # 5. Push changes back to origin (your fork)
-          git push origin main
+            # Check if there are any changes left to commit
+            if git diff --cached --quiet; then
+              echo "No changes after excluding protected files."
+            else
+              git commit -m "chore: sync upstream (keeping local README/docs)"
+              git push origin main
+              echo "Successfully synced to main."
+            fi
+          else
+            echo "::error::Automatic merge failed due to conflicts."
+            git merge --abort
+            
+            # 4. Fallback: Create PR for manual resolution
+            SYNC_BRANCH="sync-upstream-$(date +%Y%m%d-%H%M%S)"
+            echo "Creating PR branch: $SYNC_BRANCH"
+            
+            git checkout -b "$SYNC_BRANCH" upstream/main
+            git push origin "$SYNC_BRANCH"
+            
+            gh pr create \
+              --title "chore: manual upstream sync required" \
+              --body "Automatic sync failed due to conflicts. Please resolve conflicts and merge this PR into main." \
+              --base main \
+              --head "$SYNC_BRANCH" \
+              --label "sync-conflict" || echo "PR creation failed or PR already exists."
+              
+            exit 1
+          fi
