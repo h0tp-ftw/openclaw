@@ -19,6 +19,7 @@ const PREFERRED_PROVIDER_BY_AUTH_CHOICE: Partial<Record<AuthChoice, string>> = {
   "gemini-api-key": "google",
   "google-antigravity": "google-antigravity",
   "google-gemini-cli": "google-gemini-cli",
+  "gemini-cli-headless": "gemini-cli-headless",
   "zai-api-key": "zai",
   "zai-coding-global": "zai",
   "zai-coding-cn": "zai",
