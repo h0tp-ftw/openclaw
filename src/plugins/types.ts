@@ -8,7 +8,7 @@ import type { ChannelDock } from "../channels/dock.js";
 import type { ChannelId, ChannelPlugin } from "../channels/plugins/types.js";
 import type { createVpsAwareOAuthHandlers } from "../commands/oauth-flow.js";
 import type { OpenClawConfig } from "../config/config.js";
-import type { ModelProviderConfig } from "../config/types.js";
+import type { CliBackendConfig, ModelProviderConfig } from "../config/types.js";
 import type { GatewayRequestHandler } from "../gateway/server-methods/types.js";
 import type { InternalHookHandler } from "../hooks/internal-hooks.js";
 import type { HookEntry } from "../hooks/types.js";
@@ -120,6 +120,7 @@ export type ProviderPlugin = {
   envVars?: string[];
   models?: ModelProviderConfig;
   auth: ProviderAuthMethod[];
+  cliBackend?: CliBackendConfig;
   formatApiKey?: (cred: AuthProfileCredential) => string;
   refreshOAuth?: (cred: OAuthCredential) => Promise<OAuthCredential>;
 };
