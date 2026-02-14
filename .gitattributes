@@ -1,3 +1,7 @@
 * text=auto eol=lf
 README.md merge=ours
 install.sh merge=ours
+CONTRIBUTING.md merge=ours
+LICENSE merge=ours
+package.json merge=ours
+pnpm-lock.yaml merge=ours
