@@ -8,12 +8,16 @@ import { applyAuthChoiceCopilotProxy } from "./auth-choice.apply.copilot-proxy.j
 import { applyAuthChoiceGitHubCopilot } from "./auth-choice.apply.github-copilot.js";
 import { applyAuthChoiceGoogleAntigravity } from "./auth-choice.apply.google-antigravity.js";
 import { applyAuthChoiceGoogleGeminiCli } from "./auth-choice.apply.google-gemini-cli.js";
-import { applyAuthChoiceGeminiCliHeadless } from "./auth-choice.apply.gemini-cli-headless.js";
 import { applyAuthChoiceMiniMax } from "./auth-choice.apply.minimax.js";
 import { applyAuthChoiceOAuth } from "./auth-choice.apply.oauth.js";
 import { applyAuthChoiceOpenAI } from "./auth-choice.apply.openai.js";
+import { applyAuthChoicePluginProvider } from "./auth-choice.apply.plugin-provider.js";
 import { applyAuthChoiceQwenPortal } from "./auth-choice.apply.qwen-portal.js";
 import { applyAuthChoiceXAI } from "./auth-choice.apply.xai.js";
+import { resolveDefaultAgentId, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
+import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
+import { loadOpenClawPlugins } from "../plugins/loader.js";
+import { normalizeProviderId } from "../agents/model-selection.js";
 
 export type ApplyAuthChoiceParams = {
   authChoice: AuthChoice;
@@ -50,10 +54,28 @@ export async function applyAuthChoice(
     applyAuthChoiceGitHubCopilot,
     applyAuthChoiceGoogleAntigravity,
     applyAuthChoiceGoogleGeminiCli,
-    applyAuthChoiceGeminiCliHeadless,
+    applyAuthChoiceMiniMax,
     applyAuthChoiceCopilotProxy,
     applyAuthChoiceQwenPortal,
     applyAuthChoiceXAI,
+    async (p: ApplyAuthChoiceParams) => {
+      const workspaceDir =
+        resolveAgentWorkspaceDir(p.config, p.agentId ?? resolveDefaultAgentId(p.config)) ??
+        resolveDefaultAgentWorkspaceDir();
+      const registry = loadOpenClawPlugins({ config: p.config, workspaceDir });
+      const match = registry.providers.find(
+        (e) => normalizeProviderId(e.provider.id) === normalizeProviderId(p.authChoice),
+      );
+      if (match) {
+        return applyAuthChoicePluginProvider(p, {
+          authChoice: p.authChoice,
+          pluginId: match.pluginId,
+          providerId: match.provider.id,
+          label: match.provider.label,
+        });
+      }
+      return null;
+    },
   ];
 
   for (const handler of handlers) {

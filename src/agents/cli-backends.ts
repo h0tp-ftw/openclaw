@@ -1,6 +1,8 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { CliBackendConfig } from "../config/types.js";
 import { normalizeProviderId } from "./model-selection.js";
+import { resolvePluginProviders } from "../plugins/providers.js";
+import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export type ResolvedCliBackend = {
   id: string;
@@ -76,59 +78,6 @@ const DEFAULT_CODEX_BACKEND: CliBackendConfig = {
   serialize: true,
 };
 
-const GEMINI_MODEL_ALIASES: Record<string, string> = {
-  // Gemini 3 Preview
-  "pro-3": "gemini-3-pro-preview",
-  "flash-3": "gemini-3-flash-preview",
-  "gemini-3-pro": "gemini-3-pro-preview",
-  "gemini-3-flash": "gemini-3-flash-preview",
-
-  // Gemini 2.5
-  pro: "gemini-2.5-pro",
-  "2.5-pro": "gemini-2.5-pro",
-  "gemini-2.5-pro": "gemini-2.5-pro",
-
-  flash: "gemini-2.5-flash",
-  "2.5-flash": "gemini-2.5-flash",
-  "gemini-2.5-flash": "gemini-2.5-flash",
-
-  lite: "gemini-2.5-flash-lite",
-  "flash-lite": "gemini-2.5-flash-lite",
-  "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
-
-  // Auto Selectors
-  "auto-3": "auto-gemini-3",
-  "auto-gemini-3": "auto-gemini-3",
-  "auto-2.5": "auto-gemini-2.5",
-  "auto-gemini-2.5": "auto-gemini-2.5",
-};
-
-const DEFAULT_GEMINI_BACKEND: CliBackendConfig = {
-  command: "gemini",
-  // Use jsonl streaming format even for non-streaming calls, so we can parse it reliably
-  // (the default json format is pretty-printed and breaks jsonl parsing)
-  args: ["--output-format", "stream-json", "--yolo"],
-  streamingArgs: ["--output-format", "stream-json", "--yolo"],
-  // Resume args: when a previous Gemini CLI session exists, use --resume to continue
-  // the conversation. The model and prompt flags are still appended by buildCliArgs.
-  resumeArgs: ["--output-format", "stream-json", "--yolo", "--resume", "{sessionId}"],
-  env: {
-    GEMINI_TELEMETRY_ENABLED: "false",
-    GEMINI_TELEMETRY_LOG_PROMPTS: "false",
-  },
-  output: "jsonl",
-  input: "arg",
-  promptArg: "-p",
-  modelArg: "-m",
-  modelAliases: GEMINI_MODEL_ALIASES,
-  // Use "existing" so we pass the Gemini CLI session ID when one exists,
-  // enabling conversation continuation. A /new command clears the stored ID.
-  sessionMode: "existing",
-  sessionIdFields: ["session_id"],
-  systemPromptEnvVar: "GEMINI_SYSTEM_MD",
-  serialize: true,
-};
-
 function normalizeBackendKey(key: string): string {
   return normalizeProviderId(key);
 }
@@ -166,8 +115,19 @@ export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
   const ids = new Set<string>([
     normalizeBackendKey("claude-cli"),
     normalizeBackendKey("codex-cli"),
-    normalizeBackendKey("gemini-cli-headless"),
   ]);
+
+  const workspaceDir = resolveDefaultAgentWorkspaceDir();
+  const providers = resolvePluginProviders({ config: cfg, workspaceDir });
+  for (const provider of providers) {
+    if (provider.cliBackend) {
+      ids.add(normalizeBackendKey(provider.id));
+      for (const alias of provider.aliases ?? []) {
+        ids.add(normalizeBackendKey(alias));
+      }
+    }
+  }
+
   const configured = cfg?.agents?.defaults?.cliBackends ?? {};
   for (const key of Object.keys(configured)) {
     ids.add(normalizeBackendKey(key));
@@ -199,8 +159,17 @@ export function resolveCliBackendConfig(
     }
     return { id: normalized, config: { ...merged, command } };
   }
-  if (normalized === "gemini-cli-headless") {
-    const merged = mergeBackendConfig(DEFAULT_GEMINI_BACKEND, override);
+
+  const workspaceDir = resolveDefaultAgentWorkspaceDir();
+  const providers = resolvePluginProviders({ config: cfg, workspaceDir });
+  const pluginProvider = providers.find(
+    (p) =>
+      normalizeBackendKey(p.id) === normalized ||
+      p.aliases?.some((a) => normalizeBackendKey(a) === normalized),
+  );
+
+  if (pluginProvider?.cliBackend) {
+    const merged = mergeBackendConfig(pluginProvider.cliBackend, override);
     const command = merged.command?.trim();
     if (!command) {
       return null;
