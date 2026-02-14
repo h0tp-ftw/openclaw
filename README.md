@@ -54,11 +54,33 @@ graph TD
     Runner -.-> MCP[OpenClaw MCP Server]
     GeminiCLI <--> MCP
 ```
-
+### How it works
 1.  **Orchestration**: OpenClaw spawns the `gemini` binary in a headless JSON-streaming mode.
 2.  **Tool Bridge**: OpenClaw's system tools (file I/O, shell, etc.) are exposed to the CLI via an automatically injected MCP extension.
 3.  **Session Sync**: Conversations are persisted via the CLI's native `--resume` protocol.
 4. **Google Tools**: Since this is Gemini CLI, it has access to tools like web search and codebase agent for **FREE**!
+
+### Sequence Flow
+```mermaid
+sequenceDiagram
+participant U as User (Socials)
+participant G as OpenClaw Gateway
+participant R as Headless Runner (cli-runner.ts)
+participant B as Gemini Binary (Local)
+participant M as MCP Bridge
+participant T as OpenClaw Tools
+
+U->>G: Send Message
+G->>R: Delegate to Headless Runner
+R->>B: Spawn process with --resume {session_id}
+B->>M: Call tool (e.g., read_file)
+M->>T: Execute on Host
+T-->>M: Data Returned
+M-->>B: Native Tool Result
+B-->>R: NDJSON Stream (Thinking + Text)
+R-->>G: Buffer & Flush
+G-->>U: Final Intelligence
+```
 
 ---
 
@@ -68,6 +90,12 @@ graph TD
 - [**Headless Architecture**](docs/cli/gemini-cli-headless-architecture.md) — Under the hood of how this works.
 
 ---
+## 🤝 Contributing
+This fork is a community effort! Whether you want to add support for Anthropic (Claude Code), OpenAI (Codex), or other CLI backends, or improve existing integrations, your PRs are welcome :)
+
+- **Found a bug?** Open an [Issue](https://github.com/h0tp-ftw/openclaw/issues).
+
+---
 ## ✨ Bottom Line
 
-I love OpenClaw, and I made this fork to ensure that I could use the generous allowed usage for Gemini CLI while not getting banned for ToS violations. I have not been able to reach OpenClaw devs on integrating this directly into the main project, so I am releasing this fork independently
+I love OpenClaw, and I made this fork to ensure that I could use the generous allowed usage for Gemini CLI while not getting banned for ToS violations. I have not been able to reach OpenClaw devs on integrating this directly into the main project, so I am releasing this fork independently.
