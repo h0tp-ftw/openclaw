@@ -1,7 +1,19 @@
 {
   "name": "gemini-cli-headless",
   "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
   "openclaw": {
-    "kind": "provider"
+    "kind": "provider",
+    "providers": [
+      "gemini-cli-headless"
+    ],
+    "id": "gemini-cli-headless",
+    "name": "Gemini CLI (Headless)",
+    "configSchema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
   }
 }

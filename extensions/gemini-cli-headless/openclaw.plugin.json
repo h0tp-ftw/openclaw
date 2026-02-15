@@ -3,10 +3,10 @@
   "name": "Gemini CLI (Headless)",
   "version": "1.0.0",
   "kind": "provider",
+  "providers": ["gemini-cli-headless"],
   "configSchema": {
     "type": "object",
     "properties": {},
     "required": []
-  },
-  "providers": ["gemini-cli-headless"]
+  }
 }
