@@ -1,0 +1,7 @@
+{
+  "name": "gemini-cli-headless",
+  "version": "1.0.0",
+  "openclaw": {
+    "kind": "provider"
+  }
+}

@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { OpenClawPluginApi, ProviderPlugin, ProviderAuthContext, ProviderAuthResult } from "../plugins/types.js";
+import type {
+  OpenClawPluginApi,
+  ProviderPlugin,
+  ProviderAuthContext,
+  ProviderAuthResult,
+} from "../plugins/types.js";
 import { detectBinary } from "../commands/onboard-helpers.js";
 import { resolveUserPath } from "../utils.js";
 
@@ -88,21 +93,29 @@ export const geminiCliHeadlessPlugin: ProviderPlugin = {
         // --- 1. Detect gemini binary ---
         const hasGemini = await detectBinary("gemini");
         if (!hasGemini) {
-          throw new Error("The `gemini` CLI binary was not found on your PATH. Install it with: npm install -g @anthropic-ai/gemini-cli");
+          throw new Error(
+            "The `gemini` CLI binary was not found on your PATH. Install it with: npm install -g @anthropic-ai/gemini-cli",
+          );
         }
 
         // --- 2. Write ~/.gemini/settings.json ---
         await ensureGeminiSettings();
-        await ctx.prompter.note(`Configured ${GEMINI_SETTINGS_PATH} for headless OAuth.`, "Gemini CLI (Headless)");
+        await ctx.prompter.note(
+          `Configured ${GEMINI_SETTINGS_PATH} for headless OAuth.`,
+          "Gemini CLI (Headless)",
+        );
 
         // --- 3. Trigger OAuth via gemini -p "Hi" ---
-        await ctx.prompter.note("Running `gemini -p \"Hi\"` to trigger Google OAuth. Check your browser.", "Gemini CLI (Headless)");
+        await ctx.prompter.note(
+          'Running `gemini -p "Hi"` to trigger Google OAuth. Check your browser.',
+          "Gemini CLI (Headless)",
+        );
 
         const { spawn } = await import("node:child_process");
         await new Promise<void>((resolve, reject) => {
-          const child = spawn("gemini", ["-p", "Hi"], { 
+          const child = spawn("gemini", ["-p", "Hi"], {
             stdio: "inherit",
-            shell: process.platform === "win32"
+            shell: process.platform === "win32",
           });
           child.on("error", reject);
           child.on("close", (code) => {
@@ -119,16 +132,16 @@ export const geminiCliHeadlessPlugin: ProviderPlugin = {
               credential: {
                 type: "oauth",
                 provider: "gemini-cli-headless",
-              } as any
-            }
+              } as any,
+            },
           ],
-          defaultModel: model
+          defaultModel: model,
         };
-      }
-    }
-  ]
+      },
+    },
+  ],
 };
 
-export default function(api: OpenClawPluginApi) {
+export default function (api: OpenClawPluginApi) {
   api.registerProvider(geminiCliHeadlessPlugin);
 }

@@ -1,0 +1,12 @@
+{
+  "id": "gemini-cli-headless",
+  "name": "Gemini CLI (Headless)",
+  "version": "1.0.0",
+  "kind": "provider",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "providers": ["gemini-cli-headless"]
+}

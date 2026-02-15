@@ -1,7 +1,7 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { CliBackendConfig } from "../config/types.js";
-import { normalizeProviderId } from "./model-selection.js";
 import { resolvePluginProviders } from "../plugins/providers.js";
+import { normalizeProviderId } from "./model-selection.js";
 import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export type ResolvedCliBackend = {
