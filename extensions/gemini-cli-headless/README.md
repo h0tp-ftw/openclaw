@@ -27,7 +27,8 @@ This will:
 
 ## Requirements
 
-Install the Gemini CLI first:
+1. **OpenClaw Fork Only**: This extension requires the `h0tp-ftw/openclaw` fork (or a core patched with dynamic CLI backend support). Stock OpenClaw does not yet support plugin-provided CLI backends.
+2. **Gemini CLI**: Install the official CLI tool:
 
 ```bash
 npm install -g @google/gemini-cli
