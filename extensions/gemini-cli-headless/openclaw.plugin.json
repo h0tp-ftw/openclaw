@@ -1,0 +1,9 @@
+{
+  "id": "gemini-cli-headless",
+  "providers": ["gemini-cli-headless"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
