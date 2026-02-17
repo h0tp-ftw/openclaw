@@ -1,4 +1,6 @@
 import type { OpenClawConfig } from "../config/config.js";
+import { resolvePluginProviders } from "../plugins/providers.js";
+import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
 import { resolveAgentModelPrimary } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
@@ -49,17 +51,27 @@ export function normalizeProviderId(provider: string): string {
 
 export function isCliProvider(provider: string, cfg?: OpenClawConfig): boolean {
   const normalized = normalizeProviderId(provider);
-  if (normalized === "claude-cli") {
+
+  // Built-in CLI backends
+  if (normalized === "claude-cli" || normalized === "codex-cli") {
     return true;
   }
-  if (normalized === "codex-cli") {
-    return true;
-  }
-  if (normalized === "gemini-cli-headless") {
-    return true;
-  }
+
+  // Config-defined CLI backends
   const backends = cfg?.agents?.defaults?.cliBackends ?? {};
-  return Object.keys(backends).some((key) => normalizeProviderId(key) === normalized);
+  if (Object.keys(backends).some((key) => normalizeProviderId(key) === normalized)) {
+    return true;
+  }
+
+  // Plugin-provided CLI backends (dynamic discovery)
+  const workspaceDir = resolveDefaultAgentWorkspaceDir();
+  const providers = resolvePluginProviders({ config: cfg, workspaceDir });
+  return providers.some(
+    (p) =>
+      p.cliBackend &&
+      (normalizeProviderId(p.id) === normalized ||
+        (p.aliases?.some((a) => normalizeProviderId(a) === normalized) ?? false)),
+  );
 }
 
 function normalizeAnthropicModelId(model: string): string {

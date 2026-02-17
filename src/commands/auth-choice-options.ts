@@ -70,7 +70,7 @@ const AUTH_CHOICE_GROUP_DEFS: {
     value: "google",
     label: "Google",
     hint: "Gemini API key + OAuth",
-    choices: ["gemini-api-key", "google-antigravity", "google-gemini-cli", "gemini-cli-headless"],
+    choices: ["gemini-api-key", "google-antigravity", "google-gemini-cli"],
   },
   {
     value: "xai",
@@ -241,11 +241,6 @@ export function buildAuthChoiceOptions(params: {
     value: "google-gemini-cli",
     label: "Google Gemini CLI OAuth",
     hint: "Uses the bundled Gemini CLI auth plugin",
-  });
-  options.push({
-    value: "gemini-cli-headless",
-    label: "Gemini CLI (Headless)",
-    hint: "Uses local Gemini CLI binary with OAuth — no API key needed",
   });
   options.push({ value: "zai-api-key", label: "Z.AI API key" });
   options.push({
