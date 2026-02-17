@@ -30,32 +30,75 @@ DISCLAIMER: The author does not guarantee that you will not get banned from usin
 
 ---
 
-## 🚀 One-Step Install (Linux / macOS)
+## 🚀 Quick Install (Linux / macOS)
 
+**Automatic Install** (Recommended for users):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/h0tp-ftw/openclaw/main/install.sh | bash
 ```
-
 > [!NOTE]
 > **Windows Users**: Install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) first, then run the command above inside your Linux distribution.
 
 ---
 
+## 🛠️ Manual Install / Deployment (Developers)
+
+If you are deploying this fork or developing locally:
+
+1.  **Clone & Install**:
+    ```bash
+    git clone https://github.com/h0tp-ftw/openclaw.git
+    cd openclaw
+    pnpm install
+    # Important: This installs dependencies including the new extension
+    ```
+
+2.  **Build**:
+    ```bash
+    pnpm build
+    # Compiles core and extensions
+    ```
+
+3.  **Run**:
+    ```bash
+    pnpm start
+    # The 'gemini-cli-headless' extension will load automatically.
+    ```
+    
+---
+
+## 🔌 Extensions & Plugins
+
+Since I restored `src/` to a clean state, all custom logic lives in `extensions/`.
+
+- **Enabling Bundled Extensions**:
+  The `gemini-cli-headless` extension is bundled and **enabled by default** in this fork. You don't need to do anything!
+  (If you ever disable it, re-enable with: `openclaw plugins enable gemini-cli-headless`)
+
+- **Installing 3rd Party Extensions**:
+  You can easily install external extensions from npm or local paths:
+  ```bash
+  openclaw plugins install <npm-package-name>
+  openclaw plugins install ./path/to/extension.tgz
+  ```
+
+
 ## 🏗️ Architecture: How It Works
 
-This fork functions as a supercharged "Headless" wrapper. It doesn't just call an API; it orchestrates an entire CLI session.
+This fork functions as a supercharged **Extension** to OpenClaw. The core logic remains 100% compatible with upstream, while the `gemini-cli-headless` backend is dynamically loaded from `extensions/`.
 
 ```mermaid
 graph TD
     User([User]) --> Gateway[OpenClaw Gateway]
-    Gateway --> Runner[cli-runner.ts]
-    Runner --> GeminiCLI[Gemini CLI Binary]
+    Gateway --> Core[Core Logic]
+    Core -.-> Extension[extensions/gemini-cli-headless]
+    Extension --> Runner[cli-runner.ts]
+    Runner --> GeminiCLI[Gemini CLI]
     GeminiCLI --> GoogleAPI[Official Google APIs]
-    Runner -.-> MCP[OpenClaw MCP Server]
-    GeminiCLI <--> MCP
 ```
 ### How it works
-1.  **Orchestration**: OpenClaw spawns the `gemini` binary in a headless JSON-streaming mode.
+1.  **Extension Loading**: OpenClaw detects the `gemini-cli-headless` extension at startup.
+2.  **Orchestration**: The core CLI runner spawns the `gemini` binary in headless JSON-streaming mode.
 2.  **Tool Bridge**: OpenClaw's system tools (file I/O, shell, etc.) are exposed to the CLI via an automatically injected MCP extension.
 3.  **Session Sync**: Conversations are persisted via the CLI's native `--resume` protocol.
 4. **Google Tools**: Since this is Gemini CLI, it has access to tools like web search and codebase agent for **FREE**!

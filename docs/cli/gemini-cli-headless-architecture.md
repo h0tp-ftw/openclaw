@@ -50,11 +50,10 @@ flowchart TB
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| Provider Detection | [`model-selection.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/src/agents/model-selection.ts) | `isCliProvider()` routes `gemini-cli-headless` to CLI runner |
-| Backend Config | [`cli-backends.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/src/agents/cli-backends.ts) | `DEFAULT_GEMINI_BACKEND` config, model aliases, merge logic |
-| CLI Runner | [`cli-runner.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/src/agents/cli-runner.ts) | `runCliAgent()` — spawns process, parses streaming output |
-| Process Execution | [`exec.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/src/process/exec.ts) | `runCommandWithTimeout()` with activity-based timeout |
-| OAuth Provider | [`auth-choice.apply.google-gemini-cli.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/src/commands/auth-choice.apply.google-gemini-cli.ts) | Upstream `google-gemini-cli` OAuth wiring (separate from this backend) |
+| Extension Entry | [`index.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/extensions/gemini-cli-headless/index.ts) | Registers `ProviderPlugin` with CLI backend and model aliases |
+| CLI Runner | [`cli-runner.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/src/agents/cli-runner.ts) | `runCliAgent()` — spawns process, parses streaming output (Core) |
+| Process Execution | [`exec.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/src/process/exec.ts) | `runCommandWithTimeout()` with activity-based timeout (Core) |
+| Settings Manager | [`settings-manager.ts`](file:///c:/Users/h0tp/Documents/Code/openclaw/extensions/gemini-cli-headless/settings-manager.ts) | Manages `~/.gemini/settings.json` for telemetry opt-out |
 
 ## Data Flow
 

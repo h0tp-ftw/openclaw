@@ -17,6 +17,7 @@ export const BUNDLED_ENABLED_BY_DEFAULT = new Set<string>([
   "device-pair",
   "phone-control",
   "talk-voice",
+  "gemini-cli-headless",
 ]);
 
 const normalizeList = (value: unknown): string[] => {
