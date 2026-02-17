@@ -5,6 +5,8 @@ import {
   CLI_RESUME_WATCHDOG_DEFAULTS,
 } from "./cli-watchdog-defaults.js";
 import { normalizeProviderId } from "./model-selection.js";
+import { resolvePluginProviders } from "../plugins/providers.js";
+import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export type ResolvedCliBackend = {
   id: string;
@@ -154,6 +156,18 @@ export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
   for (const key of Object.keys(configured)) {
     ids.add(normalizeBackendKey(key));
   }
+  const workspaceDir = resolveDefaultAgentWorkspaceDir();
+  const providers = resolvePluginProviders({ config: cfg, workspaceDir });
+  for (const p of providers) {
+    if (p.cliBackend) {
+      ids.add(normalizeBackendKey(p.id));
+      if (p.aliases) {
+        for (const alias of p.aliases) {
+          ids.add(normalizeBackendKey(alias));
+        }
+      }
+    }
+  }
   return ids;
 }
 
@@ -175,6 +189,25 @@ export function resolveCliBackendConfig(
   }
   if (normalized === "codex-cli") {
     const merged = mergeBackendConfig(DEFAULT_CODEX_BACKEND, override);
+    const command = merged.command?.trim();
+    if (!command) {
+      return null;
+    }
+    return { id: normalized, config: { ...merged, command } };
+  }
+
+  // Check plugins first
+  const workspaceDir = resolveDefaultAgentWorkspaceDir();
+  const providers = resolvePluginProviders({ config: cfg, workspaceDir });
+  const match = providers.find(
+    (p) =>
+      p.cliBackend &&
+      (normalizeBackendKey(p.id) === normalized ||
+        (p.aliases?.some((a) => normalizeBackendKey(a) === normalized) ?? false)),
+  );
+
+  if (match?.cliBackend) {
+    const merged = mergeBackendConfig(match.cliBackend, override);
     const command = merged.command?.trim();
     if (!command) {
       return null;
