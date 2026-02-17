@@ -1,8 +1,10 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { CliBackendConfig } from "../config/types.js";
+import {
+  CLI_FRESH_WATCHDOG_DEFAULTS,
+  CLI_RESUME_WATCHDOG_DEFAULTS,
+} from "./cli-watchdog-defaults.js";
 import { normalizeProviderId } from "./model-selection.js";
-import { resolvePluginProviders } from "../plugins/providers.js";
-import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export type ResolvedCliBackend = {
   id: string;
@@ -51,6 +53,12 @@ const DEFAULT_CLAUDE_BACKEND: CliBackendConfig = {
   systemPromptMode: "append",
   systemPromptWhen: "first",
   clearEnv: ["ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_OLD"],
+  reliability: {
+    watchdog: {
+      fresh: { ...CLI_FRESH_WATCHDOG_DEFAULTS },
+      resume: { ...CLI_RESUME_WATCHDOG_DEFAULTS },
+    },
+  },
   serialize: true,
 };
 
@@ -75,6 +83,12 @@ const DEFAULT_CODEX_BACKEND: CliBackendConfig = {
   sessionMode: "existing",
   imageArg: "--image",
   imageMode: "repeat",
+  reliability: {
+    watchdog: {
+      fresh: { ...CLI_FRESH_WATCHDOG_DEFAULTS },
+      resume: { ...CLI_RESUME_WATCHDOG_DEFAULTS },
+    },
+  },
   serialize: true,
 };
 
@@ -98,6 +112,10 @@ function mergeBackendConfig(base: CliBackendConfig, override?: CliBackendConfig)
   if (!override) {
     return { ...base };
   }
+  const baseFresh = base.reliability?.watchdog?.fresh ?? {};
+  const baseResume = base.reliability?.watchdog?.resume ?? {};
+  const overrideFresh = override.reliability?.watchdog?.fresh ?? {};
+  const overrideResume = override.reliability?.watchdog?.resume ?? {};
   return {
     ...base,
     ...override,
@@ -108,6 +126,22 @@ function mergeBackendConfig(base: CliBackendConfig, override?: CliBackendConfig)
     sessionIdFields: override.sessionIdFields ?? base.sessionIdFields,
     sessionArgs: override.sessionArgs ?? base.sessionArgs,
     resumeArgs: override.resumeArgs ?? base.resumeArgs,
+    reliability: {
+      ...base.reliability,
+      ...override.reliability,
+      watchdog: {
+        ...base.reliability?.watchdog,
+        ...override.reliability?.watchdog,
+        fresh: {
+          ...baseFresh,
+          ...overrideFresh,
+        },
+        resume: {
+          ...baseResume,
+          ...overrideResume,
+        },
+      },
+    },
   };
 }
 
@@ -116,18 +150,6 @@ export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
     normalizeBackendKey("claude-cli"),
     normalizeBackendKey("codex-cli"),
   ]);
-
-  const workspaceDir = resolveDefaultAgentWorkspaceDir();
-  const providers = resolvePluginProviders({ config: cfg, workspaceDir });
-  for (const provider of providers) {
-    if (provider.cliBackend) {
-      ids.add(normalizeBackendKey(provider.id));
-      for (const alias of provider.aliases ?? []) {
-        ids.add(normalizeBackendKey(alias));
-      }
-    }
-  }
-
   const configured = cfg?.agents?.defaults?.cliBackends ?? {};
   for (const key of Object.keys(configured)) {
     ids.add(normalizeBackendKey(key));
@@ -153,23 +175,6 @@ export function resolveCliBackendConfig(
   }
   if (normalized === "codex-cli") {
     const merged = mergeBackendConfig(DEFAULT_CODEX_BACKEND, override);
-    const command = merged.command?.trim();
-    if (!command) {
-      return null;
-    }
-    return { id: normalized, config: { ...merged, command } };
-  }
-
-  const workspaceDir = resolveDefaultAgentWorkspaceDir();
-  const providers = resolvePluginProviders({ config: cfg, workspaceDir });
-  const pluginProvider = providers.find(
-    (p) =>
-      normalizeBackendKey(p.id) === normalized ||
-      p.aliases?.some((a) => normalizeBackendKey(a) === normalized),
-  );
-
-  if (pluginProvider?.cliBackend) {
-    const merged = mergeBackendConfig(pluginProvider.cliBackend, override);
     const command = merged.command?.trim();
     if (!command) {
       return null;

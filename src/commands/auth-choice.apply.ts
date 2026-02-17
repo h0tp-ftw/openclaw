@@ -1,7 +1,6 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
-import type { AuthChoice } from "./onboard-types.js";
 import { applyAuthChoiceAnthropic } from "./auth-choice.apply.anthropic.js";
 import { applyAuthChoiceApiProviders } from "./auth-choice.apply.api-providers.js";
 import { applyAuthChoiceCopilotProxy } from "./auth-choice.apply.copilot-proxy.js";
@@ -11,13 +10,10 @@ import { applyAuthChoiceGoogleGeminiCli } from "./auth-choice.apply.google-gemin
 import { applyAuthChoiceMiniMax } from "./auth-choice.apply.minimax.js";
 import { applyAuthChoiceOAuth } from "./auth-choice.apply.oauth.js";
 import { applyAuthChoiceOpenAI } from "./auth-choice.apply.openai.js";
-import { applyAuthChoicePluginProvider } from "./auth-choice.apply.plugin-provider.js";
 import { applyAuthChoiceQwenPortal } from "./auth-choice.apply.qwen-portal.js";
+import { applyAuthChoiceVllm } from "./auth-choice.apply.vllm.js";
 import { applyAuthChoiceXAI } from "./auth-choice.apply.xai.js";
-import { resolveDefaultAgentId, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
-import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
-import { loadOpenClawPlugins } from "../plugins/loader.js";
-import { normalizeProviderId } from "../agents/model-selection.js";
+import type { AuthChoice } from "./onboard-types.js";
 
 export type ApplyAuthChoiceParams = {
   authChoice: AuthChoice;
@@ -47,6 +43,7 @@ export async function applyAuthChoice(
 ): Promise<ApplyAuthChoiceResult> {
   const handlers: Array<(p: ApplyAuthChoiceParams) => Promise<ApplyAuthChoiceResult | null>> = [
     applyAuthChoiceAnthropic,
+    applyAuthChoiceVllm,
     applyAuthChoiceOpenAI,
     applyAuthChoiceOAuth,
     applyAuthChoiceApiProviders,
@@ -54,28 +51,9 @@ export async function applyAuthChoice(
     applyAuthChoiceGitHubCopilot,
     applyAuthChoiceGoogleAntigravity,
     applyAuthChoiceGoogleGeminiCli,
-    applyAuthChoiceMiniMax,
     applyAuthChoiceCopilotProxy,
     applyAuthChoiceQwenPortal,
     applyAuthChoiceXAI,
-    async (p: ApplyAuthChoiceParams) => {
-      const workspaceDir =
-        resolveAgentWorkspaceDir(p.config, p.agentId ?? resolveDefaultAgentId(p.config)) ??
-        resolveDefaultAgentWorkspaceDir();
-      const registry = loadOpenClawPlugins({ config: p.config, workspaceDir });
-      const match = registry.providers.find(
-        (e) => normalizeProviderId(e.provider.id) === normalizeProviderId(p.authChoice),
-      );
-      if (match) {
-        return applyAuthChoicePluginProvider(p, {
-          authChoice: p.authChoice,
-          pluginId: match.pluginId,
-          providerId: match.provider.id,
-          label: match.provider.label,
-        });
-      }
-      return null;
-    },
   ];
 
   for (const handler of handlers) {

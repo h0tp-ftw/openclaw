@@ -29,22 +29,30 @@ export type GetReplyOptions = {
   isHeartbeat?: boolean;
   /** Resolved heartbeat model override (provider/model string from merged per-agent config). */
   heartbeatModelOverride?: string;
+  /** If true, suppress tool error warning payloads for this run. */
+  suppressToolErrorWarnings?: boolean;
   onPartialReply?: (payload: ReplyPayload) => Promise<void> | void;
   onReasoningStream?: (payload: ReplyPayload) => Promise<void> | void;
+  /** Called when a thinking/reasoning block ends. */
+  onReasoningEnd?: () => Promise<void> | void;
+  /** Called when a new assistant message starts (e.g., after tool call or thinking block). */
+  onAssistantMessageStart?: () => Promise<void> | void;
   onBlockReply?: (payload: ReplyPayload, context?: BlockReplyContext) => Promise<void> | void;
   onToolResult?: (payload: ReplyPayload) => Promise<void> | void;
+  /** Called when a tool phase starts/updates, before summary payloads are emitted. */
+  onToolStart?: (payload: { name?: string; phase?: string }) => Promise<void> | void;
   /** Called when the actual model is selected (including after fallback).
    * Use this to get model/provider/thinkLevel for responsePrefix template interpolation. */
   onModelSelected?: (ctx: ModelSelectedContext) => void;
   disableBlockStreaming?: boolean;
   /** Timeout for block reply delivery (ms). */
   blockReplyTimeoutMs?: number;
-  /** Called for various agent events like tool execution, compaction, etc. */
-  onAgentEvent?: (evt: { stream: string; data: Record<string, unknown> }) => void;
   /** If provided, only load these skills for this session (empty = no skills). */
   skillFilter?: string[];
   /** Mutable ref to track if a reply was sent (for Slack "first" threading mode). */
   hasRepliedRef?: { value: boolean };
+  /** Override agent timeout in seconds (0 = no timeout). Threads through to resolveAgentTimeoutMs. */
+  timeoutOverrideSeconds?: number;
 };
 
 export type ReplyPayload = {

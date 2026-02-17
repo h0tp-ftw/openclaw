@@ -1,34 +1,33 @@
 import type { ImageContent } from "@mariozechner/pi-ai";
+import { resolveHeartbeatPrompt } from "../auto-reply/heartbeat.js";
 import type { ThinkLevel } from "../auto-reply/thinking.js";
 import type { OpenClawConfig } from "../config/config.js";
-import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
-import { resolveHeartbeatPrompt } from "../auto-reply/heartbeat.js";
 import { shouldLogVerbose } from "../globals.js";
 import { isTruthyEnvValue } from "../infra/env.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { runCommandWithTimeout } from "../process/exec.js";
+import { getProcessSupervisor } from "../process/supervisor/index.js";
 import { resolveSessionAgentIds } from "./agent-scope.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "./bootstrap-files.js";
 import { resolveCliBackendConfig } from "./cli-backends.js";
 import {
+  appendImagePathsToPrompt,
+  buildCliSupervisorScopeKey,
   buildCliArgs,
   buildSystemPrompt,
+  enqueueCliRun,
   normalizeCliModel,
   parseCliJson,
   parseCliJsonl,
+  resolveCliNoOutputTimeoutMs,
   resolvePromptInput,
   resolveSessionIdToSend,
   resolveSystemPromptUsage,
   writeCliImages,
-  writeSystemPromptFile,
-  createGeminiExtension,
-  cleanupResumeProcesses,
-  cleanupSuspendedCliProcesses,
 } from "./cli-runner/helpers.js";
 import { resolveOpenClawDocsPath } from "./docs-path.js";
 import { FailoverError, resolveFailoverStatus } from "./failover-error.js";
 import { classifyFailoverReason, isFailoverErrorMessage } from "./pi-embedded-helpers.js";
-import { createOpenClawCodingTools } from "./pi-tools.js";
+import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace-run.js";
 
 const log = createSubsystemLogger("agent/claude-cli");
@@ -51,9 +50,6 @@ export async function runCliAgent(params: {
   ownerNumbers?: string[];
   cliSessionId?: string;
   images?: ImageContent[];
-  onPartialReply?: (payload: { text?: string; mediaUrls?: string[] }) => void | Promise<void>;
-  onReasoningStream?: (payload: { text?: string; mediaUrls?: string[] }) => void | Promise<void>;
-  onAgentEvent?: (evt: { stream: string; data: Record<string, unknown> }) => void;
 }): Promise<EmbeddedPiRunResult> {
   const started = Date.now();
   const workspaceResolution = resolveRunWorkspaceDir({
@@ -82,26 +78,25 @@ export async function runCliAgent(params: {
   const normalizedModel = normalizeCliModel(modelId, backend);
   const modelDisplay = `${params.provider}/${modelId}`;
 
+  const extraSystemPrompt = [
+    params.extraSystemPrompt?.trim(),
+    "Tools are disabled in this session. Do not call tools.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const sessionLabel = params.sessionKey ?? params.sessionId;
+  const { contextFiles } = await resolveBootstrapContextForRun({
+    workspaceDir,
+    config: params.config,
+    sessionKey: params.sessionKey,
+    sessionId: params.sessionId,
+    warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
+  });
   const { defaultAgentId, sessionAgentId } = resolveSessionAgentIds({
     sessionKey: params.sessionKey,
     config: params.config,
   });
-
-  const tools = createOpenClawCodingTools({
-    config: params.config,
-    sessionKey: params.sessionKey,
-    workspaceDir,
-    modelProvider: params.provider,
-    modelId: params.model,
-    // Provide a minimal sandbox context if available, otherwise undefined
-    // For CLI runner, we might need to resolve sandbox if we want sandboxed tools.
-    // Assuming local execution for now as per MVP.
-    // We don't inject tools via XML anymore for native MCP interaction
-    // But we might still want them for reference if we need them, though
-    // createGeminiExtension handles the tool definitions internally via MCP server.
-  });
-  // const toolsXml = formatToolsForGeminiXml(tools);
-
   const heartbeatPrompt =
     sessionAgentId === defaultAgentId
       ? resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt)
@@ -112,28 +107,6 @@ export async function runCliAgent(params: {
     cwd: process.cwd(),
     moduleUrl: import.meta.url,
   });
-
-  const usesSystemPromptEnv = Boolean(backend.systemPromptEnvVar);
-  const extraSystemPrompt = [
-    params.extraSystemPrompt?.trim(),
-    // Inject tools XML into system prompt
-    // Note: We use the system prompt for tool definitions to keep them persistent.
-    // toolsXml, // REMOVED for native MCP
-    usesSystemPromptEnv ? undefined : "Tools are disabled in this session. Do not call tools.",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-  const sessionLabel = params.sessionKey ?? params.sessionId;
-  const { contextFiles } = await resolveBootstrapContextForRun({
-    workspaceDir,
-    config: params.config,
-    sessionKey: params.sessionKey,
-    sessionId: params.sessionId,
-    warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
-  });
-
-  // Initial System Prompt Construction
   const systemPrompt = buildSystemPrompt({
     workspaceDir,
     config: params.config,
@@ -142,362 +115,222 @@ export async function runCliAgent(params: {
     ownerNumbers: params.ownerNumbers,
     heartbeatPrompt,
     docsPath: docsPath ?? undefined,
-    tools: [], // We inject tools via extraSystemPrompt string, not this array
+    tools: [],
     contextFiles,
     modelDisplay,
     agentId: sessionAgentId,
   });
 
-  // The tool loop is now handled by Gemini CLI itself via the MCP extension.
-  // We run once and let the CLI handle tool invocations natively.
+  const { sessionId: cliSessionIdToSend, isNew } = resolveSessionIdToSend({
+    backend,
+    cliSessionId: params.cliSessionId,
+  });
+  const useResume = Boolean(
+    params.cliSessionId &&
+    cliSessionIdToSend &&
+    backend.resumeArgs &&
+    backend.resumeArgs.length > 0,
+  );
+  const sessionIdSent = cliSessionIdToSend
+    ? useResume || Boolean(backend.sessionArg) || Boolean(backend.sessionArgs?.length)
+      ? cliSessionIdToSend
+      : undefined
+    : undefined;
+  const systemPromptArg = resolveSystemPromptUsage({
+    backend,
+    isNewSession: isNew,
+    systemPrompt,
+  });
 
-  let cleanupExtension: (() => Promise<void>) | undefined;
-  let cleanupSystemPrompt: (() => Promise<void>) | undefined;
+  let imagePaths: string[] | undefined;
   let cleanupImages: (() => Promise<void>) | undefined;
+  let prompt = params.prompt;
+  if (params.images && params.images.length > 0) {
+    const imagePayload = await writeCliImages(params.images);
+    imagePaths = imagePayload.paths;
+    cleanupImages = imagePayload.cleanup;
+    if (!backend.imageArg) {
+      prompt = appendImagePathsToPrompt(prompt, imagePaths);
+    }
+  }
+
+  const { argsPrompt, stdin } = resolvePromptInput({
+    backend,
+    prompt,
+  });
+  const stdinPayload = stdin ?? "";
+  const baseArgs = useResume ? (backend.resumeArgs ?? backend.args ?? []) : (backend.args ?? []);
+  const resolvedArgs = useResume
+    ? baseArgs.map((entry) => entry.replaceAll("{sessionId}", cliSessionIdToSend ?? ""))
+    : baseArgs;
+  const args = buildCliArgs({
+    backend,
+    baseArgs: resolvedArgs,
+    modelId: normalizedModel,
+    sessionId: cliSessionIdToSend,
+    systemPrompt: systemPromptArg,
+    imagePaths,
+    promptArg: argsPrompt,
+    useResume,
+  });
+
+  const serialize = backend.serialize ?? true;
+  const queueKey = serialize ? backendResolved.id : `${backendResolved.id}:${params.runId}`;
 
   try {
-    const extensionPayload = await createGeminiExtension();
-    cleanupExtension = extensionPayload.cleanup;
-
-    // Handle images
-    let imagePaths: string[] | undefined;
-    if (params.images && params.images.length > 0) {
-      const imagePayload = await writeCliImages(params.images);
-      imagePaths = imagePayload.paths;
-      cleanupImages = imagePayload.cleanup;
-    }
-
-    const { argsPrompt, stdin } = resolvePromptInput({
-      backend,
-      prompt: params.prompt,
-    });
-
-    // Determine whether to resume an existing Gemini CLI session.
-    // When cliSessionId is set, we have a previous session to continue.
-    const { sessionId: resolvedCliSessionId, isNew: isNewCliSession } = resolveSessionIdToSend({
-      backend,
-      cliSessionId: params.cliSessionId,
-    });
-    const useResume =
-      !isNewCliSession && !!resolvedCliSessionId && (backend.resumeArgs?.length ?? 0) > 0;
-
-    const isStreaming = !!(
-      params.onPartialReply ||
-      params.onReasoningStream ||
-      params.onAgentEvent
-    );
-    const baseArgs = useResume
-      ? (backend.resumeArgs ?? backend.args ?? [])
-      : isStreaming && backend.streamingArgs
-        ? backend.streamingArgs
-        : (backend.args ?? []);
-
-    const args = buildCliArgs({
-      backend,
-      baseArgs: useResume
-        ? baseArgs.map((arg) => arg.replaceAll("{sessionId}", resolvedCliSessionId!))
-        : baseArgs,
-      modelId: normalizedModel,
-      sessionId: resolvedCliSessionId,
-      systemPrompt: resolveSystemPromptUsage({
-        backend,
-        isNewSession: isNewCliSession,
-        systemPrompt,
-      }),
-      imagePaths,
-      promptArg: argsPrompt,
-      useResume,
-    });
-
-    // Ensure the MCP extension is loaded
-    if (!args.includes("openclaw-tools")) {
-      args.unshift("-e", "openclaw-tools");
-    }
-
-    if (useResume && resolvedCliSessionId) {
-      await cleanupSuspendedCliProcesses(backend);
-      await cleanupResumeProcesses(backend, resolvedCliSessionId);
-    }
-
-    // Build env: spread process.env, apply backend overrides, clear sensitive keys, add extensions
-    const env = (() => {
-      const next: Record<string, string | undefined> = {
-        ...process.env,
-        ...backend.env,
-        GEMINI_EXTENSION_PATH: extensionPayload.path,
-        OPENCLAW_MCP_MODEL_PROVIDER: params.provider,
-        OPENCLAW_MCP_MODEL_ID: params.model ?? "",
-        OPENCLAW_SESSION_KEY: params.sessionKey ?? params.sessionId,
-        OPENCLAW_AGENT_ID: sessionAgentId,
-      };
-      for (const key of backend.clearEnv ?? []) {
-        delete next[key];
-      }
-      return next;
-    })();
-
-    // Inject system prompt via env var if the backend supports it
-    if (usesSystemPromptEnv && systemPrompt) {
-      const sysPromptResult = await writeSystemPromptFile(systemPrompt);
-      env[backend.systemPromptEnvVar!] = sysPromptResult.path;
-      cleanupSystemPrompt = sysPromptResult.cleanup;
-    }
-
-    // Track accumulated assistant text for delta computation in onAgentEvent
-    let accumulatedText = "";
-    // Track the Gemini CLI session ID (from init event) and usage (from result event)
-    let geminiCliSessionId: string | undefined;
-    let streamUsage:
-      | { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number }
-      | undefined;
-    // Track accumulated reasoning text
-    let accumulatedReasoning = "";
-    // Track streaming errors (e.g. "Loop detected, stopping execution")
-    const streamErrors: string[] = [];
-
-    log.info(
-      `cli exec: provider=${params.provider} model=${normalizedModel} promptChars=${params.prompt.length} resume=${useResume} cliSession=${resolvedCliSessionId ?? "new"}`,
-    );
-
-    const result = await runCommandWithTimeout([backend.command ?? "gemini", ...args], {
-      timeoutMs: params.timeoutMs,
-
-      cwd: workspaceDir,
-      env,
-      input: stdin ?? "",
-      onStdout: (data) => {
-        const lines = data.split("\n");
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) {
+    const output = await enqueueCliRun(queueKey, async () => {
+      log.info(
+        `cli exec: provider=${params.provider} model=${normalizedModel} promptChars=${params.prompt.length}`,
+      );
+      const logOutputText = isTruthyEnvValue(process.env.OPENCLAW_CLAUDE_CLI_LOG_OUTPUT);
+      if (logOutputText) {
+        const logArgs: string[] = [];
+        for (let i = 0; i < args.length; i += 1) {
+          const arg = args[i] ?? "";
+          if (arg === backend.systemPromptArg) {
+            const systemPromptValue = args[i + 1] ?? "";
+            logArgs.push(arg, `<systemPrompt:${systemPromptValue.length} chars>`);
+            i += 1;
             continue;
           }
-          try {
-            const chunk = JSON.parse(trimmed);
-
-            // Gemini stream-json event: init — capture session_id for continuation
-            if (chunk.type === "init") {
-              if (typeof chunk.session_id === "string" && chunk.session_id.trim()) {
-                geminiCliSessionId = chunk.session_id.trim();
-              }
-              if (params.onAgentEvent) {
-                params.onAgentEvent({
-                  stream: "init",
-                  data: {
-                    sessionId: geminiCliSessionId,
-                    model: chunk.model,
-                    resumed: useResume,
-                  },
-                });
-              }
-            }
-
-            // Gemini stream-json event: assistant message
-            else if (
-              (chunk.type === "message" &&
-                (chunk.role === "model" || chunk.role === "assistant")) ||
-              chunk.type === "text"
-            ) {
-              const content = chunk.content ?? chunk.text ?? "";
-              if (params.onPartialReply) {
-                void params.onPartialReply({ text: content });
-              }
-              accumulatedText += content;
-              if (params.onAgentEvent) {
-                params.onAgentEvent({
-                  stream: "assistant",
-                  data: { text: accumulatedText, delta: content },
-                });
-              }
-            }
-
-            // Gemini stream-json event: thinking / reasoning
-            // The Gemini CLI may emit these as "thinking" type events or inline
-            // in the model's response. We surface them for the UI.
-            else if (chunk.type === "thinking") {
-              const content = chunk.content ?? chunk.text ?? "";
-              accumulatedReasoning += content;
-              if (params.onReasoningStream) {
-                void params.onReasoningStream({ text: content });
-              }
-              if (params.onAgentEvent) {
-                params.onAgentEvent({
-                  stream: "reasoning",
-                  data: { text: accumulatedReasoning, delta: content },
-                });
-              }
-            }
-
-            // Gemini stream-json event: tool invocation
-            else if (chunk.type === "tool_use") {
-              if (params.onAgentEvent) {
-                params.onAgentEvent({
-                  stream: "tool",
-                  data: { phase: "start", tool: chunk.tool_name, ...chunk },
-                });
-              }
-            }
-
-            // Gemini stream-json event: tool result
-            else if (chunk.type === "tool_result") {
-              if (params.onAgentEvent) {
-                params.onAgentEvent({
-                  stream: "tool",
-                  data: { phase: "end", tool: chunk.tool_id, status: chunk.status },
-                });
-              }
-            }
-
-            // Gemini stream-json event: result — capture usage stats
-            else if (chunk.type === "result") {
-              const stats = chunk.stats;
-              if (stats && typeof stats === "object") {
-                streamUsage = {
-                  input:
-                    typeof stats.input_tokens === "number"
-                      ? stats.input_tokens
-                      : typeof stats.input === "number"
-                        ? stats.input
-                        : undefined,
-                  output:
-                    typeof stats.output_tokens === "number"
-                      ? stats.output_tokens
-                      : typeof stats.output === "number"
-                        ? stats.output
-                        : undefined,
-                  total:
-                    typeof stats.total_tokens === "number"
-                      ? stats.total_tokens
-                      : typeof stats.total === "number"
-                        ? stats.total
-                        : undefined,
-                  cacheRead:
-                    typeof stats.cached === "number" && stats.cached > 0 ? stats.cached : undefined,
-                };
-              }
-              if (params.onAgentEvent) {
-                params.onAgentEvent({
-                  stream: "result",
-                  data: {
-                    status: chunk.status,
-                    usage: streamUsage,
-                    sessionId: geminiCliSessionId,
-                    durationMs:
-                      typeof stats?.duration_ms === "number" ? stats.duration_ms : undefined,
-                    toolCalls: typeof stats?.tool_calls === "number" ? stats.tool_calls : undefined,
-                  },
-                });
-              }
-            }
-
-            // Gemini stream-json event: error
-            else if (chunk.type === "error") {
-              const errMsg = typeof chunk.message === "string" ? chunk.message.trim() : "";
-              if (errMsg) {
-                streamErrors.push(errMsg);
-                log.warn(`cli stream error: ${errMsg}`);
-              }
-              if (params.onAgentEvent) {
-                params.onAgentEvent({ stream: "error", data: chunk });
-              }
-            }
-
-            // Gemini stream-json event: generic event passthrough
-            else if (chunk.type === "event" && chunk.stream) {
-              if (params.onAgentEvent) {
-                params.onAgentEvent({ stream: chunk.stream, data: chunk.data ?? chunk });
-              }
-            }
-          } catch {
-            // Not JSON — ignore partial lines
+          if (arg === backend.sessionArg) {
+            logArgs.push(arg, args[i + 1] ?? "");
+            i += 1;
+            continue;
+          }
+          if (arg === backend.modelArg) {
+            logArgs.push(arg, args[i + 1] ?? "");
+            i += 1;
+            continue;
+          }
+          if (arg === backend.imageArg) {
+            logArgs.push(arg, "<image>");
+            i += 1;
+            continue;
+          }
+          logArgs.push(arg);
+        }
+        if (argsPrompt) {
+          const promptIndex = logArgs.indexOf(argsPrompt);
+          if (promptIndex >= 0) {
+            logArgs[promptIndex] = `<prompt:${argsPrompt.length} chars>`;
           }
         }
-      },
+        log.info(`cli argv: ${backend.command} ${logArgs.join(" ")}`);
+      }
+
+      const env = (() => {
+        const next = { ...process.env, ...backend.env };
+        for (const key of backend.clearEnv ?? []) {
+          delete next[key];
+        }
+        return next;
+      })();
+      const noOutputTimeoutMs = resolveCliNoOutputTimeoutMs({
+        backend,
+        timeoutMs: params.timeoutMs,
+        useResume,
+      });
+      const supervisor = getProcessSupervisor();
+      const scopeKey = buildCliSupervisorScopeKey({
+        backend,
+        backendId: backendResolved.id,
+        cliSessionId: useResume ? cliSessionIdToSend : undefined,
+      });
+
+      const managedRun = await supervisor.spawn({
+        sessionId: params.sessionId,
+        backendId: backendResolved.id,
+        scopeKey,
+        replaceExistingScope: Boolean(useResume && scopeKey),
+        mode: "child",
+        argv: [backend.command, ...args],
+        timeoutMs: params.timeoutMs,
+        noOutputTimeoutMs,
+        cwd: workspaceDir,
+        env,
+        input: stdinPayload,
+      });
+      const result = await managedRun.wait();
+
+      const stdout = result.stdout.trim();
+      const stderr = result.stderr.trim();
+      if (logOutputText) {
+        if (stdout) {
+          log.info(`cli stdout:\n${stdout}`);
+        }
+        if (stderr) {
+          log.info(`cli stderr:\n${stderr}`);
+        }
+      }
+      if (shouldLogVerbose()) {
+        if (stdout) {
+          log.debug(`cli stdout:\n${stdout}`);
+        }
+        if (stderr) {
+          log.debug(`cli stderr:\n${stderr}`);
+        }
+      }
+
+      if (result.exitCode !== 0 || result.reason !== "exit") {
+        if (result.reason === "no-output-timeout" || result.noOutputTimedOut) {
+          const timeoutReason = `CLI produced no output for ${Math.round(noOutputTimeoutMs / 1000)}s and was terminated.`;
+          log.warn(
+            `cli watchdog timeout: provider=${params.provider} model=${modelId} session=${cliSessionIdToSend ?? params.sessionId} noOutputTimeoutMs=${noOutputTimeoutMs} pid=${managedRun.pid ?? "unknown"}`,
+          );
+          throw new FailoverError(timeoutReason, {
+            reason: "timeout",
+            provider: params.provider,
+            model: modelId,
+            status: resolveFailoverStatus("timeout"),
+          });
+        }
+        if (result.reason === "overall-timeout") {
+          const timeoutReason = `CLI exceeded timeout (${Math.round(params.timeoutMs / 1000)}s) and was terminated.`;
+          throw new FailoverError(timeoutReason, {
+            reason: "timeout",
+            provider: params.provider,
+            model: modelId,
+            status: resolveFailoverStatus("timeout"),
+          });
+        }
+        const err = stderr || stdout || "CLI failed.";
+        const reason = classifyFailoverReason(err) ?? "unknown";
+        const status = resolveFailoverStatus(reason);
+        throw new FailoverError(err, {
+          reason,
+          provider: params.provider,
+          model: modelId,
+          status,
+        });
+      }
+
+      const outputMode = useResume ? (backend.resumeOutput ?? backend.output) : backend.output;
+
+      if (outputMode === "text") {
+        return { text: stdout, sessionId: undefined };
+      }
+      if (outputMode === "jsonl") {
+        const parsed = parseCliJsonl(stdout, backend);
+        return parsed ?? { text: stdout };
+      }
+
+      const parsed = parseCliJson(stdout, backend);
+      return parsed ?? { text: stdout };
     });
 
-    const stdout = result.stdout.trim();
-    const stderr = result.stderr.trim();
-    if (shouldLogVerbose()) {
-      if (stdout) {
-        log.debug(`cli stdout:\n${stdout}`);
-      }
-      if (stderr) {
-        log.debug(`cli stderr:\n${stderr}`);
-      }
-    }
+    const text = output.text?.trim();
+    const payloads = text ? [{ text }] : undefined;
 
-    // --- Error handling with Gemini-specific exit codes ---
-    if (result.code !== 0) {
-      const errorText = stderr || stdout || "CLI failed.";
-      let reason: string | null = null;
-
-      // Map Gemini CLI-specific exit codes
-      switch (result.code) {
-        case 41:
-          reason = "auth";
-          break; // FatalAuthenticationError
-        case 53:
-          reason = "rate_limit";
-          break; // FatalTurnLimitedError (retryable)
-        case 42: // FatalInputError
-        case 44: // FatalSandboxError
-        case 52: // FatalConfigError
-          reason = "unknown";
-          break;
-        default:
-          reason = classifyFailoverReason(errorText) ?? "unknown";
-      }
-
-      const status = resolveFailoverStatus(reason as any);
-      throw new FailoverError(errorText, {
-        reason: reason as any,
-        provider: params.provider,
-        model: modelId,
-        status,
-      });
-    }
-
-    // --- Parse output ---
-    const outputMode = backend.output;
-    let text = stdout;
-    // Prefer usage captured from streaming result events; fall back to final parse
-    let usage = streamUsage;
-
-    if (outputMode === "json" || outputMode === "jsonl") {
-      const parsed =
-        outputMode === "jsonl" ? parseCliJsonl(stdout, backend) : parseCliJson(stdout, backend);
-      if (parsed) {
-        text = parsed.text;
-        // If we didn't capture usage from streaming, use the parsed value
-        if (!usage) {
-          usage = parsed.usage;
-        }
-        // If we didn't capture session ID from streaming, use the parsed value
-        if (!geminiCliSessionId && parsed.sessionId) {
-          geminiCliSessionId = parsed.sessionId;
-        }
-      }
-    }
-
-    // If the CLI produced stream errors (e.g. loop detection) but no assistant
-    // text, surface the error messages so the user actually sees what happened.
-    if (!text?.trim() && streamErrors.length > 0) {
-      text = `⚠️ ${streamErrors.join("\n")}`;
-    }
-
-    const payloads = text?.trim() ? [{ text: text.trim() }] : undefined;
-
-    // Return the Gemini CLI session ID (not the OpenClaw session ID) so it gets
-    // stored for conversation continuation on the next message.
     return {
       payloads,
       meta: {
         durationMs: Date.now() - started,
         agentMeta: {
-          sessionId: geminiCliSessionId ?? params.sessionId,
+          sessionId: output.sessionId ?? sessionIdSent ?? params.sessionId ?? "",
           provider: params.provider,
           model: modelId,
-          usage,
+          usage: output.usage,
         },
       },
     };
@@ -518,12 +351,6 @@ export async function runCliAgent(params: {
     }
     throw err;
   } finally {
-    if (cleanupExtension) {
-      await cleanupExtension();
-    }
-    if (cleanupSystemPrompt) {
-      await cleanupSystemPrompt();
-    }
     if (cleanupImages) {
       await cleanupImages();
     }

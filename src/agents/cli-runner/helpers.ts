@@ -1,226 +1,34 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
-import type { ImageContent } from "@mariozechner/pi-ai";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { ImageContent } from "@mariozechner/pi-ai";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { CliBackendConfig } from "../../config/types.js";
-import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";
-import { runExec } from "../../process/exec.js";
 import { buildTtsSystemPromptHint } from "../../tts/tts.js";
-import { escapeRegExp, isRecord } from "../../utils.js";
+import { isRecord } from "../../utils.js";
+import { buildModelAliasLines } from "../model-alias-lines.js";
 import { resolveDefaultModelForAgent } from "../model-selection.js";
+import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";
 import { detectRuntimeShell } from "../shell-utils.js";
 import { buildSystemPromptParams } from "../system-prompt-params.js";
 import { buildAgentSystemPrompt } from "../system-prompt.js";
-
-/**
- * Write system prompt to a temporary GEMINI.md file for env-var-based injection
- * (e.g. GEMINI_SYSTEM_MD). Returns the file path and a cleanup function.
- */
-export async function writeSystemPromptFile(
-  systemPrompt: string,
-): Promise<{ path: string; cleanup: () => Promise<void> }> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-sysprompt-"));
-  const promptFile = path.join(tempDir, "GEMINI.md");
-  await fs.writeFile(promptFile, systemPrompt, "utf-8");
-  const cleanup = async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  };
-  return { path: promptFile, cleanup };
-}
-
-export async function createGeminiExtension(): Promise<{
-  path: string;
-  cleanup: () => Promise<void>;
-}> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-gemini-ext-"));
-  const extensionJsonPath = path.join(tempDir, "gemini-extension.json");
-
-  // Resolve path relative to this module, not process.cwd()
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const srcServerPath = path.resolve(__dirname, "../mcp-server.ts");
-  const distServerPath = path.resolve(__dirname, "../mcp-server.js");
-
-  let command = "node";
-  let args: string[] = [];
-
-  try {
-    await fs.access(srcServerPath);
-    // Use tsx for source
-    command = "node";
-    args = ["--import", "tsx", srcServerPath];
-  } catch {
-    // Fallback to compiled output
-    args = [distServerPath];
-  }
-
-  const manifest = {
-    name: "openclaw-tools",
-    version: "1.0.0",
-    description: "OpenClaw Tools for Gemini CLI",
-    mcpServers: {
-      openclaw: {
-        command,
-        args,
-        cwd: process.cwd(),
-      },
-    },
-  };
-
-  await fs.writeFile(extensionJsonPath, JSON.stringify(manifest, null, 2), "utf-8");
-
-  const cleanup = async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  };
-
-  return { path: tempDir, cleanup };
-}
+export { buildCliSupervisorScopeKey, resolveCliNoOutputTimeoutMs } from "./reliability.js";
 
 const CLI_RUN_QUEUE = new Map<string, Promise<unknown>>();
-
-export async function cleanupResumeProcesses(
-  backend: CliBackendConfig,
-  sessionId: string,
-): Promise<void> {
-  if (process.platform === "win32") {
-    return;
-  }
-  const resumeArgs = backend.resumeArgs ?? [];
-  if (resumeArgs.length === 0) {
-    return;
-  }
-  if (!resumeArgs.some((arg) => arg.includes("{sessionId}"))) {
-    return;
-  }
-  const commandToken = path.basename(backend.command ?? "").trim();
-  if (!commandToken) {
-    return;
-  }
-
-  const resumeTokens = resumeArgs.map((arg) => arg.replaceAll("{sessionId}", sessionId));
-  const pattern = [commandToken, ...resumeTokens]
-    .filter(Boolean)
-    .map((token) => escapeRegExp(token))
-    .join(".*");
-  if (!pattern) {
-    return;
-  }
-
-  try {
-    await runExec("pkill", ["-f", pattern]);
-  } catch {
-    // ignore missing pkill or no matches
-  }
-}
-
-function buildSessionMatchers(backend: CliBackendConfig): RegExp[] {
-  const commandToken = path.basename(backend.command ?? "").trim();
-  if (!commandToken) {
-    return [];
-  }
-  const matchers: RegExp[] = [];
-  const sessionArg = backend.sessionArg?.trim();
-  const sessionArgs = backend.sessionArgs ?? [];
-  const resumeArgs = backend.resumeArgs ?? [];
-
-  const addMatcher = (args: string[]) => {
-    if (args.length === 0) {
-      return;
-    }
-    const tokens = [commandToken, ...args];
-    const pattern = tokens
-      .map((token, index) => {
-        const tokenPattern = tokenToRegex(token);
-        return index === 0 ? `(?:^|\\s)${tokenPattern}` : `\\s+${tokenPattern}`;
-      })
-      .join("");
-    matchers.push(new RegExp(pattern));
-  };
-
-  if (sessionArgs.some((arg) => arg.includes("{sessionId}"))) {
-    addMatcher(sessionArgs);
-  } else if (sessionArg) {
-    addMatcher([sessionArg, "{sessionId}"]);
-  }
-
-  if (resumeArgs.some((arg) => arg.includes("{sessionId}"))) {
-    addMatcher(resumeArgs);
-  }
-
-  return matchers;
-}
-
-function tokenToRegex(token: string): string {
-  if (!token.includes("{sessionId}")) {
-    return escapeRegExp(token);
-  }
-  const parts = token.split("{sessionId}").map((part) => escapeRegExp(part));
-  return parts.join("\\S+");
-}
-
-/**
- * Cleanup suspended OpenClaw CLI processes that have accumulated.
- * Only cleans up if there are more than the threshold (default: 10).
- */
-export async function cleanupSuspendedCliProcesses(
-  backend: CliBackendConfig,
-  threshold = 10,
-): Promise<void> {
-  if (process.platform === "win32") {
-    return;
-  }
-  const matchers = buildSessionMatchers(backend);
-  if (matchers.length === 0) {
-    return;
-  }
-
-  try {
-    const { stdout } = await runExec("ps", ["-ax", "-o", "pid=,stat=,command="]);
-    const suspended: number[] = [];
-    for (const line of stdout.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        continue;
-      }
-      const match = /^(\d+)\s+(\S+)\s+(.*)$/.exec(trimmed);
-      if (!match) {
-        continue;
-      }
-      const pid = Number(match[1]);
-      const stat = match[2] ?? "";
-      const command = match[3] ?? "";
-      if (!Number.isFinite(pid)) {
-        continue;
-      }
-      if (!stat.includes("T")) {
-        continue;
-      }
-      if (!matchers.some((matcher) => matcher.test(command))) {
-        continue;
-      }
-      suspended.push(pid);
-    }
-
-    if (suspended.length > threshold) {
-      // Verified locally: stopped (T) processes ignore SIGTERM, so use SIGKILL.
-      await runExec("kill", ["-9", ...suspended.map((pid) => String(pid))]);
-    }
-  } catch {
-    // ignore errors - best effort cleanup
-  }
-}
 export function enqueueCliRun<T>(key: string, task: () => Promise<T>): Promise<T> {
   const prior = CLI_RUN_QUEUE.get(key) ?? Promise.resolve();
   const chained = prior.catch(() => undefined).then(task);
-  const tracked = chained.finally(() => {
-    if (CLI_RUN_QUEUE.get(key) === tracked) {
-      CLI_RUN_QUEUE.delete(key);
-    }
-  });
+  // Keep queue continuity even when a run rejects, without emitting unhandled rejections.
+  const tracked = chained
+    .catch(() => undefined)
+    .finally(() => {
+      if (CLI_RUN_QUEUE.get(key) === tracked) {
+        CLI_RUN_QUEUE.delete(key);
+      }
+    });
   CLI_RUN_QUEUE.set(key, tracked);
   return chained;
 }
@@ -238,25 +46,6 @@ export type CliOutput = {
   sessionId?: string;
   usage?: CliUsage;
 };
-
-function buildModelAliasLines(cfg?: OpenClawConfig) {
-  const models = cfg?.agents?.defaults?.models ?? {};
-  const entries: Array<{ alias: string; model: string }> = [];
-  for (const [keyRaw, entryRaw] of Object.entries(models)) {
-    const model = String(keyRaw ?? "").trim();
-    if (!model) {
-      continue;
-    }
-    const alias = String((entryRaw as { alias?: string } | undefined)?.alias ?? "").trim();
-    if (!alias) {
-      continue;
-    }
-    entries.push({ alias, model });
-  }
-  return entries
-    .toSorted((a, b) => a.alias.localeCompare(b.alias))
-    .map((entry) => `- ${entry.alias}: ${entry.model}`);
-}
 
 export function buildSystemPrompt(params: {
   workspaceDir: string;
@@ -332,23 +121,10 @@ export function normalizeCliModel(modelId: string, backend: CliBackendConfig): s
 function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
   const pick = (key: string) =>
     typeof raw[key] === "number" && raw[key] > 0 ? raw[key] : undefined;
-  const input =
-    pick("input_tokens") ??
-    pick("inputTokens") ??
-    pick("prompt_tokens") ??
-    pick("promptTokens") ??
-    pick("input");
-  const output =
-    pick("output_tokens") ??
-    pick("outputTokens") ??
-    pick("candidates_tokens") ??
-    pick("candidatesTokens") ??
-    pick("output");
+  const input = pick("input_tokens") ?? pick("inputTokens");
+  const output = pick("output_tokens") ?? pick("outputTokens");
   const cacheRead =
-    pick("cache_read_input_tokens") ??
-    pick("cached_input_tokens") ??
-    pick("cached") ??
-    pick("cacheRead");
+    pick("cache_read_input_tokens") ?? pick("cached_input_tokens") ?? pick("cacheRead");
   const cacheWrite = pick("cache_write_input_tokens") ?? pick("cacheWrite");
   const total = pick("total_tokens") ?? pick("total");
   if (!input && !output && !cacheRead && !cacheWrite && !total) {
@@ -381,16 +157,6 @@ function collectText(value: unknown): string {
   }
   if (isRecord(value.message)) {
     return collectText(value.message);
-  }
-  // Handle Gemini CLI response format
-  if (typeof value.response === "string") {
-    return value.response;
-  }
-  if (Array.isArray(value.candidates)) {
-    return value.candidates.map((c) => collectText(c)).join("");
-  }
-  if (Array.isArray(value.parts)) {
-    return value.parts.map((p) => collectText(p)).join("");
   }
   return "";
 }
@@ -465,42 +231,14 @@ export function parseCliJsonl(raw: string, backend: CliBackendConfig): CliOutput
     if (!sessionId && typeof parsed.thread_id === "string") {
       sessionId = parsed.thread_id.trim();
     }
-    // Gemini stream-json init event: capture session_id
-    if (parsed.type === "init" && !sessionId && typeof parsed.session_id === "string") {
-      sessionId = parsed.session_id.trim() || undefined;
-    }
     if (isRecord(parsed.usage)) {
       usage = toUsage(parsed.usage) ?? usage;
-    }
-    // Gemini stream-json result event: capture usage from stats
-    if (parsed.type === "result" && isRecord(parsed.stats)) {
-      usage = toUsage(parsed.stats as Record<string, unknown>) ?? usage;
     }
     const item = isRecord(parsed.item) ? parsed.item : null;
     if (item && typeof item.text === "string") {
       const type = typeof item.type === "string" ? item.type.toLowerCase() : "";
       if (!type || type.includes("message")) {
         texts.push(item.text);
-      }
-    }
-    // Gemini message format (role: "assistant" or "model")
-    if (
-      parsed.type === "message" &&
-      (parsed.role === "assistant" || parsed.role === "model") &&
-      (typeof parsed.content === "string" || typeof parsed.text === "string")
-    ) {
-      // Accumulate deltas without newline separation
-      let content = "";
-      if (typeof parsed.content === "string") {
-        content = parsed.content;
-      } else if (typeof parsed.text === "string") {
-        content = parsed.text;
-      }
-
-      if (texts.length > 0 && typeof parsed.delta === "boolean" && parsed.delta) {
-        texts[texts.length - 1] += content;
-      } else {
-        texts.push(content);
       }
     }
   }
@@ -621,7 +359,7 @@ export function buildCliArgs(params: {
   useResume: boolean;
 }): string[] {
   const args: string[] = [...params.baseArgs];
-  if (params.backend.modelArg && params.modelId) {
+  if (!params.useResume && params.backend.modelArg && params.modelId) {
     args.push(params.backend.modelArg, params.modelId);
   }
   if (!params.useResume && params.systemPrompt && params.backend.systemPromptArg) {

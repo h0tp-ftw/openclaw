@@ -27,6 +27,35 @@ let hasLoggedModelCatalogError = false;
 const defaultImportPiSdk = () => import("./pi-model-discovery.js");
 let importPiSdk = defaultImportPiSdk;
 
+const CODEX_PROVIDER = "openai-codex";
+const OPENAI_CODEX_GPT53_MODEL_ID = "gpt-5.3-codex";
+const OPENAI_CODEX_GPT53_SPARK_MODEL_ID = "gpt-5.3-codex-spark";
+
+function applyOpenAICodexSparkFallback(models: ModelCatalogEntry[]): void {
+  const hasSpark = models.some(
+    (entry) =>
+      entry.provider === CODEX_PROVIDER &&
+      entry.id.toLowerCase() === OPENAI_CODEX_GPT53_SPARK_MODEL_ID,
+  );
+  if (hasSpark) {
+    return;
+  }
+
+  const baseModel = models.find(
+    (entry) =>
+      entry.provider === CODEX_PROVIDER && entry.id.toLowerCase() === OPENAI_CODEX_GPT53_MODEL_ID,
+  );
+  if (!baseModel) {
+    return;
+  }
+
+  models.push({
+    ...baseModel,
+    id: OPENAI_CODEX_GPT53_SPARK_MODEL_ID,
+    name: OPENAI_CODEX_GPT53_SPARK_MODEL_ID,
+  });
+}
+
 export function resetModelCatalogCacheForTest() {
   modelCatalogPromise = null;
   hasLoggedModelCatalogError = false;
@@ -59,44 +88,35 @@ export async function loadModelCatalog(params?: {
         }
         return a.name.localeCompare(b.name);
       });
-
-    let cfg = params?.config;
-    if (!cfg) {
-      try {
-        cfg = (await import("../config/config.js")).loadConfig();
-      } catch {
-        // Fallback or ignore
-      }
-    }
-
     try {
-      if (cfg) {
-        await ensureOpenClawModelsJson(cfg);
-      }
-
+      const cfg = params?.config ?? loadConfig();
+      await ensureOpenClawModelsJson(cfg);
+      await (
+        await import("./pi-auth-json.js")
+      ).ensurePiAuthJsonFromAuthProfiles(resolveOpenClawAgentDir());
       // IMPORTANT: keep the dynamic import *inside* the try/catch.
+      // If this fails once (e.g. during a pnpm install that temporarily swaps node_modules),
+      // we must not poison the cache with a rejected promise (otherwise all channel handlers
+      // will keep failing until restart).
       const piSdk = await importPiSdk();
       const agentDir = resolveOpenClawAgentDir();
       const { join } = await import("node:path");
-
-      let registryItems: Array<DiscoveredModel> = [];
-      try {
-        const authStorage = new piSdk.AuthStorage(join(agentDir, "auth.json"));
-        const registry = new piSdk.ModelRegistry(authStorage, join(agentDir, "models.json")) as
-          | {
-              getAll: () => Array<DiscoveredModel>;
-            }
-          | Array<DiscoveredModel>;
-        registryItems = Array.isArray(registry) ? registry : registry.getAll();
-      } catch (e) {
-        // Ignore registry load errors, proceed with empty or partial
-      }
-
-      for (const entry of registryItems) {
+      const authStorage = new piSdk.AuthStorage(join(agentDir, "auth.json"));
+      const registry = new piSdk.ModelRegistry(authStorage, join(agentDir, "models.json")) as
+        | {
+            getAll: () => Array<DiscoveredModel>;
+          }
+        | Array<DiscoveredModel>;
+      const entries = Array.isArray(registry) ? registry : registry.getAll();
+      for (const entry of entries) {
         const id = String(entry?.id ?? "").trim();
-        if (!id) continue;
+        if (!id) {
+          continue;
+        }
         const provider = String(entry?.provider ?? "").trim();
-        if (!provider) continue;
+        if (!provider) {
+          continue;
+        }
         const name = String(entry?.name ?? id).trim() || id;
         const contextWindow =
           typeof entry?.contextWindow === "number" && entry.contextWindow > 0
@@ -106,74 +126,11 @@ export async function loadModelCatalog(params?: {
         const input = Array.isArray(entry?.input) ? entry.input : undefined;
         models.push({ id, name, provider, contextWindow, reasoning, input });
       }
+      applyOpenAICodexSparkFallback(models);
 
       if (models.length === 0) {
+        // If we found nothing, don't cache this result so we can try again.
         modelCatalogPromise = null;
-      }
-
-      // Explicitly add Gemini CLI models requested by user
-      const geminiModels: ModelCatalogEntry[] = [
-        {
-          id: "gemini-3-pro-preview",
-          name: "Gemini 3 Pro",
-          provider: "gemini-cli",
-          contextWindow: 2097152,
-          input: ["text", "image"],
-        },
-        {
-          id: "gemini-3-flash-preview",
-          name: "Gemini 3 Flash",
-          provider: "gemini-cli",
-          contextWindow: 1048576,
-          input: ["text", "image"],
-        },
-        {
-          id: "gemini-2.5-pro",
-          name: "Gemini 2.5 Pro",
-          provider: "gemini-cli",
-          contextWindow: 2097152,
-          input: ["text", "image"],
-        },
-        {
-          id: "gemini-2.5-flash",
-          name: "Gemini 2.5 Flash",
-          provider: "gemini-cli",
-          contextWindow: 1048576,
-          input: ["text", "image"],
-        },
-        {
-          id: "gemini-2.5-flash-lite",
-          name: "Gemini 2.5 Flash Lite",
-          provider: "gemini-cli",
-          contextWindow: 1048576,
-          input: ["text", "image"],
-        },
-        {
-          id: "auto-gemini-3",
-          name: "Auto Gemini 3",
-          provider: "gemini-cli",
-          contextWindow: 2097152,
-          input: ["text", "image"],
-        },
-        {
-          id: "auto-gemini-2.5",
-          name: "Auto Gemini 2.5",
-          provider: "gemini-cli",
-          contextWindow: 2097152,
-          input: ["text", "image"],
-        },
-      ];
-
-      for (const gm of geminiModels) {
-        if (!models.some((m) => m.provider === gm.provider && m.id === gm.id)) {
-          models.push(gm);
-        }
-      }
-
-      if (cfg?.agents?.defaults?.cliMode) {
-        const { isCliProvider } = await import("./model-selection.js");
-        const filtered = models.filter((m) => isCliProvider(m.provider, cfg));
-        return sortModels(filtered);
       }
 
       return sortModels(models);
@@ -182,19 +139,8 @@ export async function loadModelCatalog(params?: {
         hasLoggedModelCatalogError = true;
         console.warn(`[model-catalog] Failed to load model catalog: ${String(error)}`);
       }
+      // Don't poison the cache on transient dependency/filesystem issues.
       modelCatalogPromise = null;
-
-      // Attempt to filter even on failure if we have models
-      if (cfg?.agents?.defaults?.cliMode && models.length > 0) {
-        try {
-          const { isCliProvider } = await import("./model-selection.js");
-          const filtered = models.filter((m) => isCliProvider(m.provider, cfg));
-          return sortModels(filtered);
-        } catch {
-          // ignore import error
-        }
-      }
-
       if (models.length > 0) {
         return sortModels(models);
       }
