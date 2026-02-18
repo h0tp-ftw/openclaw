@@ -35,7 +35,7 @@ flowchart TB
         G --> L["result event"]
     end
 
-    subgraph MCP["MCP Tools Bridge"]
+    subgraph MCP["MCP Tools Bridge (Planned)"]
         F -.->|"-e openclaw-tools"| M["gemini-extension.json"]
         M --> N["OpenClaw MCP Server"]
         N --> O["Coding Tools"]
@@ -92,7 +92,7 @@ gemini -e openclaw-tools --output-format stream-json --yolo -m gemini-3-pro-prev
 
 | Flag | Purpose |
 |------|---------|
-| `-e openclaw-tools` | Load MCP extension for OpenClaw coding tools |
+| `-e openclaw-tools` | Load MCP extension for OpenClaw coding tools (Future) |
 | `--output-format stream-json` | NDJSON streaming output |
 | `--yolo` | Auto-approve all tool calls (headless mode) |
 | `-m <model>` | Model selection |
@@ -117,9 +117,10 @@ Injected via `GEMINI_SYSTEM_MD` env var pointing to a temp file with workspace c
 
 Kill timer resets on output activity, preventing premature termination of long-running streaming sessions.
 
-## MCP Tools Bridge
+## MCP Tools Bridge (Planned)
 
-OpenClaw exposes coding tools via auto-generated `gemini-extension.json` manifest, excluding tools the Gemini CLI already provides natively (file I/O, shell, web search).
+OpenClaw intends to expose coding tools via an auto-generated `gemini-extension.json` manifest. Currently, the runner operates in **chat-only mode** with tools disabled.
+
 
 ## Session Management
 
