@@ -6,13 +6,10 @@ the `gemini` binary as a subprocess and streams responses via JSON-lines.
 
 ## Enable
 
-Bundled plugins are disabled by default. Enable this one:
+## Enable
+ 
+This plugin is **enabled by default** in the `h0tp-ftw/openclaw` fork. You do not need to manually enable it.
 
-```bash
-openclaw plugins enable gemini-cli-headless
-```
-
-Restart the Gateway after enabling.
 
 ## Authenticate
 

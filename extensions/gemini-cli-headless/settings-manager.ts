@@ -40,6 +40,21 @@ export async function ensureGeminiSettings(): Promise<void> {
     // File doesn't exist or is invalid — start fresh.
   }
 
-  const merged = { ...existing, ...HEADLESS_SETTINGS };
+  // Deep merge to preserve existing user settings while enforcing our requirements
+  const merged = JSON.parse(JSON.stringify(existing));
+
+  // Security
+  if (!merged.security) merged.security = {};
+  if (!merged.security.auth) merged.security.auth = {};
+  merged.security.auth.selectedType = HEADLESS_SETTINGS.security.auth.selectedType;
+
+  // Telemetry
+  if (!merged.coreClient) merged.coreClient = {};
+  merged.coreClient.disableTelemetry = HEADLESS_SETTINGS.coreClient.disableTelemetry;
+
+  // Models (Enable Gemini 3 Preview)
+  if (!merged.models) merged.models = {};
+  merged.models.gemini3 = HEADLESS_SETTINGS.models.gemini3;
+
   await fs.writeFile(GEMINI_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n", "utf-8");
 }
