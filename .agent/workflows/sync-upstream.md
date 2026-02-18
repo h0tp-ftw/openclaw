@@ -4,63 +4,30 @@ description: Sync local fork with upstream OpenClaw repository while preserving 
 
 # Sync Upstream Workflow
 
-Use this workflow to keep your fork up-to-date with the official `openclaw` repository while maintaining your local changes (like `gemini-cli-headless`, custom README, etc.).
+Use this workflow to pull the latest updates from the official `openclaw` repository. This workflow uses a **Recursive "Ours" Merge Strategy**, which means:
+1.  All new features and bugfixes from upstream are pulled in automatically.
+2.  Any conflicts with your local customized files (`gemini-cli-headless`, core patches) are automatically resolved by keeping **your local version**.
 
-## Prerequisites
+This ensures your extension and patches are never overwritten by upstream changes.
 
-Ensure you have the upstream remote configured:
+## Workflow
 
-```bash
-git remote -v
-# If upstream is missing:
-git remote add upstream https://github.com/openclaw/openclaw.git
-```
-
-## Workflow: Rebase (Recommended)
-
-Rebasing replays your custom commits *on top* of the new upstream work. This keeps a clean history where your customizations are always the "latest" layer.
-
-1.  **Fetch latest upstream:**
+1.  **Sync with Upstream:**
+    // turbo
     ```bash
-    git fetch upstream
+    git fetch upstream && git merge -X ours upstream/main -m "merge: sync with upstream preserving local extension"
     ```
 
-2.  **Rebase your main branch:**
+2.  **Update Dependencies & Rebuild:**
+    // turbo
     ```bash
-    git checkout main
-    git rebase upstream/main
-    ```
-
-3.  **Handle Conflicts (if any):**
-    *   If a file conflicts (e.g., `package.json` changed in both), git will pause.
-    *   Edit the file to resolve conflict.
-    *   Run `git add <file>`
-    *   Run `git rebase --continue`
-
-4.  **Update Dependencies & Build:**
-    ```bash
-    pnpm install
-    pnpm build
-    ```
-
-5.  **Verify your changes still work:**
-    ```bash
-    # Run relevant tests
-    pnpm test
-    # Or check your specific feature
-    openclaw onboard --help
-    ```
-
-6.  **Force Push to your fork:**
-    (Required because rebase rewrites history)
-    ```bash
-    git push origin main --force-with-lease
+    pnpm install && pnpm build
     ```
 
 ## CLI Alias (Optional)
 
-You can add this to your shell profile:
+Add this to your shell profile for a one-command update:
 
 ```bash
-alias sync-openclaw="git fetch upstream && git rebase upstream/main && pnpm i && pnpm build"
+alias update-openclaw="git fetch upstream && git merge -X ours upstream/main -m 'merge: sync' && pnpm i && pnpm build"
 ```
