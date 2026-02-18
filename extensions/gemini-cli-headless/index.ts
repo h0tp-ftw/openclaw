@@ -21,8 +21,8 @@ import { ensureGeminiSettings, GEMINI_SETTINGS_PATH } from "./settings-manager.j
 // Constants
 // ---------------------------------------------------------------------------
 
-const PROVIDER_ID = "gemini-cli-headless";
-const PROVIDER_LABEL = "Gemini CLI (Headless)";
+const PROVIDER_ID = "google-gemini-cli";
+const PROVIDER_LABEL = "Gemini CLI";
 
 // ---------------------------------------------------------------------------
 // Model aliases — map user-friendly names to actual Gemini model IDs
@@ -99,7 +99,7 @@ async function detectBinary(name: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 const geminiCliHeadlessPlugin = {
-  id: "gemini-cli-headless",
+  id: "google-gemini-cli",
   name: "Gemini CLI Headless",
   description: "Headless provider using the local Gemini CLI binary with OAuth",
   configSchema: emptyPluginConfigSchema(),
@@ -107,7 +107,7 @@ const geminiCliHeadlessPlugin = {
     api.registerProvider({
       id: PROVIDER_ID,
       label: PROVIDER_LABEL,
-      aliases: ["gemini-headless", "google-gemini-cli", "gemini-cli"],
+      aliases: ["gemini-cli-headless", "gemini-headless", "gemini-cli"],
       cliBackend: GEMINI_CLI_BACKEND as any,
       models: {
         baseUrl: "cli://headless",
