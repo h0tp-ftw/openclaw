@@ -39,6 +39,14 @@ curl -fsSL https://raw.githubusercontent.com/h0tp-ftw/openclaw/main/install.sh |
 > [!NOTE]
 > **Windows Users**: Install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run the command above inside your Linux distribution.
 
+## ✨ Seamless Onboarding (Plug & Play)
+
+This fork features a completely automated onboarding flow. If the `gemini` CLI is missing, the installer will offer to install and configure it for you automatically.
+
+<p align="center">
+  <img src="assets/screenshots/gemini-cli-onboarding.png" alt="Seamless Onboarding Flow" width="700">
+</p>
+
 ### One-Step Install (Recommended)
 
 1.  **Clone this fork**:
