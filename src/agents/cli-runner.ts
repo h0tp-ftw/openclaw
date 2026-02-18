@@ -7,7 +7,7 @@ import { isTruthyEnvValue } from "../infra/env.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getProcessSupervisor } from "../process/supervisor/index.js";
 import { resolveSessionAgentIds } from "./agent-scope.js";
-import { makeBootstrapWarn, resolveBootstrapContextForRun } from "./bootstrap-files.js";
+import { resolveBootstrapContextForRun } from "./bootstrap-files.js";
 import { resolveCliBackendConfig } from "./cli-backends.js";
 import {
   appendImagePathsToPrompt,
