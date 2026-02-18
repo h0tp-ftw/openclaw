@@ -98,7 +98,21 @@ export async function runCliAgent(params: {
 
   // If AGENTS.md exists, we use it EXCLUSIVELY and do not build the standard system prompt.
   // Otherwise, we build the standard prompt.
-  const systemPrompt = hasAgentsMd 
+  const { sessionAgentId } = resolveSessionAgentIds({
+    sessionKey: params.sessionKey,
+    config: params.config,
+  });
+
+  const heartbeatPrompt = resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt);
+  const docsPath = (await resolveOpenClawDocsPath({ workspaceDir })) ?? undefined;
+
+  const { contextFiles } = await resolveBootstrapContextForRun({
+    workspaceDir,
+    config: params.config,
+    agentId: sessionAgentId,
+  });
+
+  const systemPrompt = hasAgentsMd
     ? "" // We won't use this content string, we'll use the file path later
     : buildSystemPrompt({
         workspaceDir,
@@ -107,7 +121,7 @@ export async function runCliAgent(params: {
         extraSystemPrompt,
         ownerNumbers: params.ownerNumbers,
         heartbeatPrompt,
-        docsPath: docsPath ?? undefined,
+        docsPath,
         tools: [],
         contextFiles,
         modelDisplay,
