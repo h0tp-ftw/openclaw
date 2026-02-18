@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "openclaw-tools": {
+      "command": "cmd.exe",
+      "args": ["/c", "extensions\\gemini-cli-headless\\start-mcp.cmd"]
+    }
+  }
+}
