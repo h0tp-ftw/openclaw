@@ -133,7 +133,7 @@ function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
   return { input, output, cacheRead, cacheWrite, total };
 }
 
-function collectText(value: unknown): string {
+export function collectText(value: unknown): string {
   if (!value) {
     return "";
   }
@@ -155,13 +155,38 @@ function collectText(value: unknown): string {
   if (Array.isArray(value.content)) {
     return value.content.map((entry) => collectText(entry)).join("");
   }
+  if (typeof value.message === "string") {
+    return value.message;
+  }
   if (isRecord(value.message)) {
     return collectText(value.message);
   }
   return "";
 }
 
-function pickSessionId(
+export function createCliJsonlStreamParser() {
+  let buffer = "";
+  return (chunk: string): unknown[] => {
+    buffer += chunk;
+    const lines = buffer.split(/\r?\n/g);
+    buffer = lines.pop() ?? "";
+    const parsed: unknown[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      try {
+        parsed.push(JSON.parse(trimmed));
+      } catch {
+        // Ignore partial/invalid JSON
+      }
+    }
+    return parsed;
+  };
+}
+
+export function pickSessionId(
   parsed: Record<string, unknown>,
   backend: CliBackendConfig,
 ): string | undefined {
@@ -234,11 +259,24 @@ export function parseCliJsonl(raw: string, backend: CliBackendConfig): CliOutput
     if (isRecord(parsed.usage)) {
       usage = toUsage(parsed.usage) ?? usage;
     }
-    const item = isRecord(parsed.item) ? parsed.item : null;
-    if (item && typeof item.text === "string") {
-      const type = typeof item.type === "string" ? item.type.toLowerCase() : "";
-      if (!type || type.includes("message")) {
-        texts.push(item.text);
+    if (isRecord(parsed.stats)) {
+      usage = toUsage(parsed.stats) ?? usage;
+    }
+    const type = typeof parsed.type === "string" ? parsed.type.toLowerCase() : "";
+    if (type === "message") {
+      const role = typeof parsed.role === "string" ? parsed.role.toLowerCase() : "";
+      if (role === "assistant" || !role) {
+        texts.push(collectText(parsed));
+      }
+    } else if (type === "result") {
+      // stats already handled above
+    } else {
+      const item = isRecord(parsed.item) ? parsed.item : null;
+      if (item && typeof item.text === "string") {
+        const itemType = typeof item.type === "string" ? item.type.toLowerCase() : "";
+        if (!itemType || itemType.includes("message")) {
+          texts.push(item.text);
+        }
       }
     }
   }

@@ -14,16 +14,20 @@ import {
   buildCliSupervisorScopeKey,
   buildCliArgs,
   buildSystemPrompt,
+  collectText,
+  createCliJsonlStreamParser,
   enqueueCliRun,
   normalizeCliModel,
   parseCliJson,
   parseCliJsonl,
+  pickSessionId,
   resolveCliNoOutputTimeoutMs,
   resolvePromptInput,
   resolveSessionIdToSend,
   resolveSystemPromptUsage,
   writeCliImages,
 } from "./cli-runner/helpers.js";
+import { isRecord } from "../utils.js";
 import { resolveOpenClawDocsPath } from "./docs-path.js";
 import { FailoverError, resolveFailoverStatus } from "./failover-error.js";
 import { classifyFailoverReason, isFailoverErrorMessage } from "./pi-embedded-helpers.js";
@@ -50,6 +54,7 @@ export async function runCliAgent(params: {
   runId: string;
   extraSystemPrompt?: string;
   streamParams?: import("../commands/agent/types.js").AgentStreamParams;
+  onPartialReply?: (payload: { text?: string; mediaUrls?: string[] }) => void | Promise<void>;
   ownerNumbers?: string[];
   cliSessionId?: string;
   images?: ImageContent[];
@@ -132,7 +137,8 @@ export async function runCliAgent(params: {
     backend,
     cliSessionId: params.cliSessionId,
   });
-  const useResume = Boolean(
+  const isReset = params.prompt.trim().startsWith("/new") || params.prompt.trim().startsWith("/reset");
+  const useResume = !isReset && Boolean(
     params.cliSessionId &&
     cliSessionIdToSend &&
     backend.resumeArgs &&
@@ -276,6 +282,10 @@ export async function runCliAgent(params: {
         cliSessionId: useResume ? cliSessionIdToSend : undefined,
       });
 
+      const outputMode = useResume ? (backend.resumeOutput ?? backend.output) : backend.output;
+      const streamParser = createCliJsonlStreamParser();
+      let streamSessionId: string | undefined;
+
       const managedRun = await supervisor.spawn({
         sessionId: params.sessionId,
         backendId: backendResolved.id,
@@ -288,6 +298,28 @@ export async function runCliAgent(params: {
         cwd: workspaceDir,
         env,
         input: stdinPayload,
+        onStdout: (chunk) => {
+          if (outputMode === "jsonl") {
+            const objects = streamParser(chunk);
+            for (const obj of objects) {
+              if (!isRecord(obj)) {
+                continue;
+              }
+              const type = typeof obj.type === "string" ? obj.type.toLowerCase() : "";
+              if (type === "init") {
+                const sid = pickSessionId(obj, backend);
+                if (sid) {
+                  streamSessionId = sid;
+                }
+              } else if (type === "message") {
+                const text = collectText(obj);
+                if (text) {
+                  void params.onPartialReply?.({ text });
+                }
+              }
+            }
+          }
+        },
       });
       const result = await managedRun.wait();
 
@@ -343,18 +375,23 @@ export async function runCliAgent(params: {
         });
       }
 
-      const outputMode = useResume ? (backend.resumeOutput ?? backend.output) : backend.output;
+      const finalOutput = (() => {
+        if (outputMode === "text") {
+          return { text: stdout, sessionId: undefined, usage: undefined };
+        }
+        if (outputMode === "jsonl") {
+          const parsed = parseCliJsonl(stdout, backend);
+          return parsed ?? { text: stdout, sessionId: undefined, usage: undefined };
+        }
+        const parsed = parseCliJson(stdout, backend);
+        return parsed ?? { text: stdout, sessionId: undefined, usage: undefined };
+      })();
 
-      if (outputMode === "text") {
-        return { text: stdout, sessionId: undefined };
-      }
-      if (outputMode === "jsonl") {
-        const parsed = parseCliJsonl(stdout, backend);
-        return parsed ?? { text: stdout };
-      }
-
-      const parsed = parseCliJson(stdout, backend);
-      return parsed ?? { text: stdout };
+      return {
+        text: finalOutput.text,
+        sessionId: streamSessionId || finalOutput.sessionId || sessionIdSent,
+        usage: finalOutput.usage,
+      };
     });
 
     const text = output.text?.trim();
