@@ -150,7 +150,18 @@ export function collectText(value: unknown): string {
     return value.text;
   }
   if (typeof value.content === "string") {
-    return value.content;
+    let content = value.content;
+    // Heuristic: if content is just a single newline, it's often a wrap segment
+    if (content === "\n" || content === "\r\n") {
+       return "";
+    }
+    // If content ends in a solitary newline, it might be a wrap
+    if (content.endsWith("\n") && !content.endsWith("\n\n") && content.length > 2) {
+       // but don't strip if it looks like a paragraph end (e.g. ends in punctuation)
+       // actually, the user said "just join the segments", so we'll be aggressive
+       return content.replace(/\r?\n$/, " ");
+    }
+    return content;
   }
   if (Array.isArray(value.content)) {
     return value.content.map((entry) => collectText(entry)).join("");
