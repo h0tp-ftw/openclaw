@@ -103,6 +103,8 @@ export function createProcessSupervisor(): ProcessSupervisor {
       cancelAdapter?.(reason);
     };
 
+    let hasReceivedOutput = false;
+
     const touchOutput = () => {
       registry.touchOutput(runId);
       if (!noOutputTimeoutMs || settled) {
@@ -111,9 +113,15 @@ export function createProcessSupervisor(): ProcessSupervisor {
       if (noOutputTimer) {
         clearTimeout(noOutputTimer);
       }
+      
+      // Patience Mode: once we've seen ANY output, we become much more patient.
+      // We triple the timeout because the child has proven it is alive and working.
+      const effectiveTimeout = hasReceivedOutput ? noOutputTimeoutMs * 3 : noOutputTimeoutMs;
+      hasReceivedOutput = true;
+
       noOutputTimer = setTimeout(() => {
         requestCancel("no-output-timeout");
-      }, noOutputTimeoutMs);
+      }, effectiveTimeout);
     };
 
     try {

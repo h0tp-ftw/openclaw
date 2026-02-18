@@ -27,8 +27,8 @@ export async function applyAuthChoiceGoogleGeminiCli(
   if (mode === "headless") {
     return await applyAuthChoicePluginProvider(params, {
       authChoice: "google-gemini-cli",
-      pluginId: "gemini-cli-headless",
-      providerId: "gemini-cli-headless", // Maps to extension's provider ID
+      pluginId: "google-gemini-cli-headless",
+      providerId: "google-gemini-cli-headless", // Maps to extension's provider ID
       methodId: "oauth",
       label: "Gemini CLI (Headless)",
     });

@@ -19,7 +19,7 @@ const CODEX_MODELS = [
   "gpt-5.1-codex-mini",
   "gpt-5.1-codex-max",
 ];
-const GOOGLE_PREFIXES = ["gemini-3", "gemini-2"];
+const GOOGLE_PREFIXES = ["gemini-3", "gemini-2", "auto-gemini"];
 const ZAI_PREFIXES = ["glm-5", "glm-4.7", "glm-4.7-flash", "glm-4.7-flashx"];
 const MINIMAX_PREFIXES = ["minimax-m2.1", "minimax-m2.5"];
 const XAI_PREFIXES = ["grok-4"];
@@ -55,7 +55,7 @@ export function isModernModelRef(ref: ModelRef): boolean {
     return matchesExactOrPrefix(id, CODEX_MODELS);
   }
 
-  if (provider === "google" || provider === "google-gemini-cli" || provider === "gemini-cli-headless") {
+  if (provider === "google" || provider === "google-gemini-cli" || provider === "google-gemini-cli-headless" || provider === "gemini-cli-headless") {
     return matchesPrefix(id, GOOGLE_PREFIXES);
   }
 

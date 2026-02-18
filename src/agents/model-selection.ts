@@ -88,6 +88,9 @@ export function isCliProvider(provider: string, cfg?: OpenClawConfig): boolean {
   if (normalized === "gemini-cli-headless") {
     return true;
   }
+  if (normalized === "google-gemini-cli-headless") {
+    return true;
+  }
   if (normalized === "google-gemini-cli") {
     return true;
   }
