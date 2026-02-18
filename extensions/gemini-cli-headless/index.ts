@@ -104,7 +104,7 @@ const geminiCliHeadlessPlugin = {
     api.registerProvider({
       id: PROVIDER_ID,
       label: PROVIDER_LABEL,
-      aliases: ["gemini-headless"],
+      aliases: ["gemini-headless", "google-gemini-cli", "gemini-cli"],
       cliBackend: GEMINI_CLI_BACKEND as any,
       models: {
         baseUrl: "cli://headless",
