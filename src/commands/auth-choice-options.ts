@@ -240,8 +240,8 @@ const BASE_AUTH_CHOICE_OPTIONS: ReadonlyArray<AuthChoiceOption> = [
   },
   {
     value: "google-gemini-cli",
-    label: "Google Gemini CLI OAuth",
-    hint: "Uses the bundled Gemini CLI auth plugin",
+    label: "Google Gemini CLI (Headless / API)",
+    hint: "Uses the bundled Gemini CLI auth plugin (supports Headless or API mode)",
   },
   { value: "zai-api-key", label: "Z.AI API key" },
   {
