@@ -119,18 +119,22 @@ export function normalizeCliModel(modelId: string, backend: CliBackendConfig): s
 }
 
 function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
-  const pick = (obj: any, key: string) =>
-    typeof obj[key] === "number" && obj[key] > 0 ? obj[key] : undefined;
+  const pick = (obj: Record<string, unknown>, key: string): number | undefined => {
+    const val = obj[key];
+    return typeof val === "number" && val > 0 ? val : undefined;
+  };
 
   // Handle nested models structure
   if (isRecord(raw.models)) {
-    for (const modelKey in raw.models) {
-      const modelData = raw.models[modelKey];
+    const models = raw.models;
+    for (const modelKey in models) {
+      const modelData = models[modelKey];
       if (isRecord(modelData)) {
-        if (isRecord(modelData.tokens)) {
-          return toUsage(modelData.tokens as any);
+        const md = modelData;
+        if (isRecord(md.tokens)) {
+          return toUsage(md.tokens);
         }
-        const usage = toUsage(modelData as any);
+        const usage = toUsage(md);
         if (usage) {
           return usage;
         }
