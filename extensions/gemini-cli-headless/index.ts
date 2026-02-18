@@ -61,9 +61,9 @@ const GEMINI_MODEL_ALIASES: Record<string, string> = {
 
 const GEMINI_CLI_BACKEND = {
   command: "gemini",
-  args: ["--output-format", "stream-json", "--yolo"],
+  args: ["--output-format", "json", "--yolo"],
   streamingArgs: ["--output-format", "stream-json", "--yolo"],
-  resumeArgs: ["--output-format", "stream-json", "--yolo", "--resume", "{sessionId}"],
+  resumeArgs: ["--output-format", "json", "--yolo", "--resume", "{sessionId}"],
   env: {
     GEMINI_TELEMETRY_ENABLED: "false",
     GEMINI_TELEMETRY_LOG_PROMPTS: "false",
@@ -71,7 +71,7 @@ const GEMINI_CLI_BACKEND = {
     LINES: "10000",
     TERM: "dumb",
   },
-  output: "jsonl",
+  output: "json",
   input: "arg",
   promptArg: "-p",
   modelArg: "-m",

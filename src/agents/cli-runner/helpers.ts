@@ -121,10 +121,13 @@ export function normalizeCliModel(modelId: string, backend: CliBackendConfig): s
 function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
   const pick = (key: string) =>
     typeof raw[key] === "number" && raw[key] > 0 ? raw[key] : undefined;
-  const input = pick("input_tokens") ?? pick("inputTokens");
-  const output = pick("output_tokens") ?? pick("outputTokens");
+  const input = pick("input_tokens") ?? pick("inputTokens") ?? pick("input");
+  const output = pick("output_tokens") ?? pick("outputTokens") ?? pick("output");
   const cacheRead =
-    pick("cache_read_input_tokens") ?? pick("cached_input_tokens") ?? pick("cacheRead");
+    pick("cache_read_input_tokens") ??
+    pick("cached_input_tokens") ??
+    pick("cacheRead") ??
+    pick("cached");
   const cacheWrite = pick("cache_write_input_tokens") ?? pick("cacheWrite");
   const total = pick("total_tokens") ?? pick("total");
   if (!input && !output && !cacheRead && !cacheWrite && !total) {
@@ -231,8 +234,13 @@ export function parseCliJson(raw: string, backend: CliBackendConfig): CliOutput 
     return null;
   }
   const sessionId = pickSessionId(parsed, backend);
-  const usage = isRecord(parsed.usage) ? toUsage(parsed.usage) : undefined;
+  const usage = isRecord(parsed.usage)
+    ? toUsage(parsed.usage)
+    : isRecord(parsed.stats)
+      ? toUsage(parsed.stats)
+      : undefined;
   const text =
+    collectText(parsed.response) ||
     collectText(parsed.message) ||
     collectText(parsed.content) ||
     collectText(parsed.result) ||
