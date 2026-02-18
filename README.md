@@ -39,9 +39,33 @@ curl -fsSL https://raw.githubusercontent.com/h0tp-ftw/openclaw/main/install.sh |
 > [!NOTE]
 > **Windows Users**: Install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) first, then run the command above inside your Linux distribution.
 
----
+### One-Step Install (Recommended)
 
-## 🛠️ Manual Install / Deployment (Developers)
+1.  **Clone this fork**:
+    ```bash
+    git clone https://github.com/h0tp-ftw/openclaw.git
+    cd openclaw
+    ```
+
+2.  **Run the Installer**:
+    ```bash
+    ./install.sh   # (macOS/Linux)
+    .\install.ps1  # (Windows PowerShell)
+    ```
+
+    This will install dependencies, build the project, and configure the `update-openclaw` alias for easy updates.
+
+### Updating
+
+To update your installation (pulling latest features from official OpenClaw + keeping Gemini support):
+
+```bash
+update-openclaw
+```
+
+(Or manually: `git fetch upstream && git merge -X ours upstream/main && pnpm i && pnpm build`)
+
+## Manual Install / Developer Setup
 
 If you are deploying this fork or developing locally:
 
