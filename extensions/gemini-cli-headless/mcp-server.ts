@@ -12,16 +12,27 @@ type McpRequest = {
   params?: any;
 };
 
-// ... types ...
+type McpResponse = {
+  jsonrpc: "2.0";
+  id: number | string;
+  result?: any;
+  error?: {
+    code: number;
+    message: string;
+    data?: any;
+  };
+};
 
 // Basic JSON-RPC 2.0 Loop
 async function main() {
   const commonTools = createOpenClawTools({
     workspaceDir: process.cwd(),
     sandboxed: false,
+    allowHostBrowserControl: true, // Enable browser automation
     config: {
       tools: {
         web: { search: { enabled: true, provider: "brave" } },
+        browser: { enabled: true, headless: false }, // Default to visible browser for user to see actions
       },
     } as any,
   });
@@ -32,9 +43,7 @@ async function main() {
       cwd: process.cwd()
   });
 
-  const processTool = createProcessTool({
-      allowed: true
-  });
+  const processTool = createProcessTool(); // No args needed for default behavior
 
   const tools = [...commonTools, execTool, processTool];
 
