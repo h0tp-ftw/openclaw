@@ -67,6 +67,9 @@ const GEMINI_CLI_BACKEND = {
   env: {
     GEMINI_TELEMETRY_ENABLED: "false",
     GEMINI_TELEMETRY_LOG_PROMPTS: "false",
+    COLUMNS: "1000",
+    LINES: "1000",
+    TERM: "dumb",
   },
   output: "jsonl",
   input: "arg",
