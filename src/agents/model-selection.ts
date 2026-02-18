@@ -88,6 +88,12 @@ export function isCliProvider(provider: string, cfg?: OpenClawConfig): boolean {
   if (normalized === "gemini-cli-headless") {
     return true;
   }
+  if (normalized === "google-gemini-cli") {
+    return true;
+  }
+  if (normalized === "gemini-cli") {
+    return true;
+  }
   const backends = cfg?.agents?.defaults?.cliBackends ?? {};
   // Plugin-provided CLI backends (dynamic discovery)
   const workspaceDir = resolveDefaultAgentWorkspaceDir();
