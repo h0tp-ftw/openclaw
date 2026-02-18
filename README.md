@@ -37,7 +37,7 @@ DISCLAIMER: The author does not guarantee that you will not get banned from usin
 curl -fsSL https://raw.githubusercontent.com/h0tp-ftw/openclaw/main/install.sh | bash
 ```
 > [!NOTE]
-> **Windows Users**: Install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) first, then run the command above inside your Linux distribution.
+> **Windows Users**: Install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run the command above inside your Linux distribution.
 
 ### One-Step Install (Recommended)
 
@@ -49,21 +49,17 @@ curl -fsSL https://raw.githubusercontent.com/h0tp-ftw/openclaw/main/install.sh |
 
 2.  **Run the Installer**:
     ```bash
-    ./install.sh   # (macOS/Linux)
-    .\install.ps1  # (Windows PowerShell)
+    ./install.sh
     ```
 
-    This will install dependencies, build the project, and configure the `update-openclaw` alias for easy updates.
+    This will install dependencies and build the project.
 
 ### Updating
 
 To update your installation (pulling latest features from official OpenClaw + keeping Gemini support):
 
 ```bash
-update-openclaw
-```
-
-(Or manually: `git fetch upstream && git merge -X ours upstream/main && pnpm i && pnpm build`)
+(Or manually: `git pull --rebase && pnpm i && pnpm build`)
 
 ## Manual Install / Developer Setup
 
