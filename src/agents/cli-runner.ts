@@ -31,6 +31,9 @@ import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace-run.js";
 
 const log = createSubsystemLogger("agent/claude-cli");
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 export async function runCliAgent(params: {
   sessionId: string;
@@ -85,41 +88,31 @@ export async function runCliAgent(params: {
     .filter(Boolean)
     .join("\n");
 
-  const sessionLabel = params.sessionKey ?? params.sessionId;
-  const { contextFiles } = await resolveBootstrapContextForRun({
-    workspaceDir,
-    config: params.config,
-    sessionKey: params.sessionKey,
-    sessionId: params.sessionId,
-    warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
-  });
-  const { defaultAgentId, sessionAgentId } = resolveSessionAgentIds({
-    sessionKey: params.sessionKey,
-    config: params.config,
-  });
-  const heartbeatPrompt =
-    sessionAgentId === defaultAgentId
-      ? resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt)
-      : undefined;
-  const docsPath = await resolveOpenClawDocsPath({
-    workspaceDir,
-    argv1: process.argv[1],
-    cwd: process.cwd(),
-    moduleUrl: import.meta.url,
-  });
-  const systemPrompt = buildSystemPrompt({
-    workspaceDir,
-    config: params.config,
-    defaultThinkLevel: params.thinkLevel,
-    extraSystemPrompt,
-    ownerNumbers: params.ownerNumbers,
-    heartbeatPrompt,
-    docsPath: docsPath ?? undefined,
-    tools: [],
-    contextFiles,
-    modelDisplay,
-    agentId: sessionAgentId,
-  });
+  // Check for AGENTS.md in workspace root
+  const agentsMdPath = path.join(workspaceDir, "AGENTS.md");
+  let hasAgentsMd = false;
+  try {
+     await fs.access(agentsMdPath);
+     hasAgentsMd = true;
+  } catch {}
+
+  // If AGENTS.md exists, we use it EXCLUSIVELY and do not build the standard system prompt.
+  // Otherwise, we build the standard prompt.
+  const systemPrompt = hasAgentsMd 
+    ? "" // We won't use this content string, we'll use the file path later
+    : buildSystemPrompt({
+        workspaceDir,
+        config: params.config,
+        defaultThinkLevel: params.thinkLevel,
+        extraSystemPrompt,
+        ownerNumbers: params.ownerNumbers,
+        heartbeatPrompt,
+        docsPath: docsPath ?? undefined,
+        tools: [],
+        contextFiles,
+        modelDisplay,
+        agentId: sessionAgentId,
+      });
 
   const { sessionId: cliSessionIdToSend, isNew } = resolveSessionIdToSend({
     backend,
@@ -139,11 +132,13 @@ export async function runCliAgent(params: {
   const systemPromptArg = resolveSystemPromptUsage({
     backend,
     isNewSession: isNew,
-    systemPrompt,
+    systemPrompt: hasAgentsMd ? "AGENTS.MD_MARKER" : systemPrompt, 
   });
 
   let imagePaths: string[] | undefined;
   let cleanupImages: (() => Promise<void>) | undefined;
+  let systemPromptPath: string | undefined;
+  let cleanupSystemPrompt: (() => Promise<void>) | undefined;
   let prompt = params.prompt;
   if (params.images && params.images.length > 0) {
     const imagePayload = await writeCliImages(params.images);
@@ -151,6 +146,22 @@ export async function runCliAgent(params: {
     cleanupImages = imagePayload.cleanup;
     if (!backend.imageArg) {
       prompt = appendImagePathsToPrompt(prompt, imagePaths);
+    }
+  }
+
+  // If the backend uses an env var for system prompt:
+  // 1. If we have AGENTS.md, use that path directly.
+  // 2. If we have a generated prompt, write it to a temp file.
+  if (backend.systemPromptEnvVar && systemPromptArg) {
+    if (hasAgentsMd) {
+        systemPromptPath = agentsMdPath;
+    } else {
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-cli-sys-"));
+        systemPromptPath = path.join(tempDir, "SYSTEM.md");
+        await fs.writeFile(systemPromptPath, systemPromptArg, "utf-8");
+        cleanupSystemPrompt = async () => {
+            await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        };
     }
   }
 
@@ -225,7 +236,17 @@ export async function runCliAgent(params: {
           delete next[key];
         }
         if (backend.systemPromptEnvVar && systemPromptArg) {
-          next[backend.systemPromptEnvVar] = systemPromptArg;
+           // We need to write this to a temp file because env vars have size limits
+           // and some CLIs expect a path.
+           // However, we are inside `enqueueCliRun` callback here, but we need the path beforehand.
+           // Actually, we can write it before `enqueueCliRun`.
+           // Let's assume `systemPromptPath` is available in scope (we will add logic above).
+           if (systemPromptPath) {
+             next[backend.systemPromptEnvVar] = systemPromptPath;
+           } else {
+             // Fallback to direct value if no path logic used (should act as safety)
+             next[backend.systemPromptEnvVar] = systemPromptArg;
+           }
         }
         return next;
       })();
@@ -356,6 +377,9 @@ export async function runCliAgent(params: {
   } finally {
     if (cleanupImages) {
       await cleanupImages();
+    }
+    if (cleanupSystemPrompt) {
+      await cleanupSystemPrompt();
     }
   }
 }
