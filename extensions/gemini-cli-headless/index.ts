@@ -166,6 +166,15 @@ const geminiCliHeadlessPlugin = {
             contextWindow: 1048576,
             maxTokens: 8192,
           },
+          {
+            id: "gemini-2.5-flash-lite",
+            name: "Gemini 2.5 Flash Lite",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 1048576,
+            maxTokens: 8192,
+          },
         ],
       },
       auth: [
