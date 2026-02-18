@@ -10,6 +10,19 @@ the `gemini` binary as a subprocess and streams responses via JSON-lines.
  
 This plugin is **enabled by default** in the `h0tp-ftw/openclaw` fork. You do not need to manually enable it.
 
+## MCP Tool Bridge (Experimental)
+
+OpenClaw exposes its powerful coding tools (Web Search, File I/O, Bash) via the Model Context Protocol (MCP).
+
+To use these tools with an MCP-compatible client (like Claude Desktop or Gemini CLI with MCP support):
+
+1.  Point your client to the generated manifest:
+    `extensions/gemini-cli-headless/gemini-extension.json`
+
+2.  Or use the launcher script directly:
+    `extensions/gemini-cli-headless/start-mcp.cmd`
+
+This bridge allows the headless agent to perform real-world actions like browsing the web and editing files.
 
 ## Authenticate
 

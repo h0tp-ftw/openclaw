@@ -24,7 +24,7 @@
 **OpenClaw (h0tp-ftw's fork)** is a high-performance fork of OpenClaw that uses the **official Gemini CLI** as a headless backend. This provides:
 - ✅ **100% ToS Compliance**: Authorized OAuth flows via official binaries.
 - ✅ **Massive Context**: Leverage the full context windows of Gemini Pro/Flash (up to 1M tokens) with generous daily limit resets.
-- ✅ **Zero-Setup**: Pre-configured for headless usage with your Google account.
+- ✅ **Zero-Setup Tools**: OpenClaw's elite coding tools bridged directly to the CLI via MCP (Experimental).
 
 DISCLAIMER: The author does not guarantee that you will not get banned from using the Gemini CLI. Use at your own risk.
 
