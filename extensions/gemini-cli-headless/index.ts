@@ -106,6 +106,47 @@ const geminiCliHeadlessPlugin = {
       label: PROVIDER_LABEL,
       aliases: ["gemini-headless"],
       cliBackend: GEMINI_CLI_BACKEND as any,
+      models: {
+        baseUrl: "cli://headless",
+        models: [
+          {
+            id: "gemini-3-pro-preview",
+            name: "Gemini 3 Pro",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 1048576,
+            maxTokens: 8192,
+          },
+          {
+            id: "gemini-3-flash-preview",
+            name: "Gemini 3 Flash",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 1048576,
+            maxTokens: 8192,
+          },
+          {
+            id: "gemini-2.5-pro",
+            name: "Gemini 2.5 Pro",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 128000,
+            maxTokens: 8192,
+          },
+          {
+            id: "gemini-2.5-flash",
+            name: "Gemini 2.5 Flash",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 128000,
+            maxTokens: 8192,
+          },
+        ],
+      },
       auth: [
         {
           id: "oauth",
@@ -115,12 +156,39 @@ const geminiCliHeadlessPlugin = {
 
           async run(ctx: ProviderAuthContext): Promise<ProviderAuthResult> {
             // 1. Detect gemini binary
-            const hasGemini = await detectBinary("gemini");
+            let hasGemini = await detectBinary("gemini");
             if (!hasGemini) {
-              throw new Error(
-                "The `gemini` CLI binary was not found on your PATH.\n" +
-                  "Install it with: npm install -g @google/gemini-cli",
-              );
+              const confirm = await ctx.prompter.confirm({
+                message:
+                  "The `gemini` CLI binary was not found on your PATH. Would you like to install it now?\n" +
+                  "(Runs: npm install -g @google/gemini-cli)",
+                initialValue: true,
+              });
+
+              if (confirm) {
+                await ctx.prompter.note(
+                  "Installing @google/gemini-cli globally...",
+                  "Gemini CLI (Headless)",
+                );
+                const { exec } = await import("node:child_process");
+                await new Promise<void>((resolve, reject) => {
+                  exec("npm install -g @google/gemini-cli", (error) => {
+                    if (error) {
+                      reject(new Error(`Installation failed: ${error.message}`));
+                    } else {
+                      resolve();
+                    }
+                  });
+                });
+                hasGemini = await detectBinary("gemini");
+              }
+
+              if (!hasGemini) {
+                throw new Error(
+                  "The `gemini` CLI binary is still missing.\n" +
+                    "Please install it manually: npm install -g @google/gemini-cli",
+                );
+              }
             }
 
             // 2. Configure ~/.gemini/settings.json for headless OAuth
@@ -149,7 +217,7 @@ const geminiCliHeadlessPlugin = {
               });
             });
 
-            const model = `${PROVIDER_ID}/gemini-2.5-pro`;
+            const model = `${PROVIDER_ID}/gemini-3-pro-preview`;
             return {
               profiles: [
                 {
