@@ -80,7 +80,7 @@ export async function runCliAgent(params: {
 
   const extraSystemPrompt = [
     params.extraSystemPrompt?.trim(),
-    "Tools are disabled in this session. Do not call tools.",
+    // "Tools are disabled in this session. Do not call tools.", // Removed to support MCP
   ]
     .filter(Boolean)
     .join("\n");
@@ -223,6 +223,9 @@ export async function runCliAgent(params: {
         const next = { ...process.env, ...backend.env };
         for (const key of backend.clearEnv ?? []) {
           delete next[key];
+        }
+        if (backend.systemPromptEnvVar && systemPromptArg) {
+          next[backend.systemPromptEnvVar] = systemPromptArg;
         }
         return next;
       })();

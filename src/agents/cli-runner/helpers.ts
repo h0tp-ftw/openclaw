@@ -265,7 +265,10 @@ export function resolveSystemPromptUsage(params: {
   if (when === "first" && !params.isNewSession) {
     return null;
   }
-  if (!params.backend.systemPromptArg?.trim()) {
+  if (
+    !params.backend.systemPromptArg?.trim() &&
+    !params.backend.systemPromptEnvVar?.trim()
+  ) {
     return null;
   }
   return systemPrompt;
