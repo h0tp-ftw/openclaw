@@ -119,17 +119,34 @@ export function normalizeCliModel(modelId: string, backend: CliBackendConfig): s
 }
 
 function toUsage(raw: Record<string, unknown>): CliUsage | undefined {
-  const pick = (key: string) =>
-    typeof raw[key] === "number" && raw[key] > 0 ? raw[key] : undefined;
-  const input = pick("input_tokens") ?? pick("inputTokens") ?? pick("input");
-  const output = pick("output_tokens") ?? pick("outputTokens") ?? pick("output");
+  const pick = (obj: any, key: string) =>
+    typeof obj[key] === "number" && obj[key] > 0 ? obj[key] : undefined;
+
+  // Handle nested models structure
+  if (isRecord(raw.models)) {
+    for (const modelKey in raw.models) {
+      const modelData = raw.models[modelKey];
+      if (isRecord(modelData)) {
+        if (isRecord(modelData.tokens)) {
+          return toUsage(modelData.tokens as any);
+        }
+        const usage = toUsage(modelData as any);
+        if (usage) {
+          return usage;
+        }
+      }
+    }
+  }
+
+  const input = pick(raw, "input_tokens") ?? pick(raw, "inputTokens") ?? pick(raw, "input");
+  const output = pick(raw, "output_tokens") ?? pick(raw, "outputTokens") ?? pick(raw, "output");
   const cacheRead =
-    pick("cache_read_input_tokens") ??
-    pick("cached_input_tokens") ??
-    pick("cacheRead") ??
-    pick("cached");
-  const cacheWrite = pick("cache_write_input_tokens") ?? pick("cacheWrite");
-  const total = pick("total_tokens") ?? pick("total");
+    pick(raw, "cache_read_input_tokens") ??
+    pick(raw, "cached_input_tokens") ??
+    pick(raw, "cacheRead") ??
+    pick(raw, "cached");
+  const cacheWrite = pick(raw, "cache_write_input_tokens") ?? pick(raw, "cacheWrite");
+  const total = pick(raw, "total_tokens") ?? pick(raw, "total");
   if (!input && !output && !cacheRead && !cacheWrite && !total) {
     return undefined;
   }
