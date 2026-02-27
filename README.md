@@ -1,5 +1,10 @@
 # 🦞 OpenClaw (h0tp-ftw's fork)
 
+> [!IMPORTANT]
+> **This project is archived.** I have decided to take a new, more universal approach via [Ionosphere](https://github.com/h0tp-ftw/ionosphere) to ensure that any project, not just OpenClaw, can access my Gemini CLI usage method. I am now using Ionosphere to power my OpenClaw agent.
+> 
+> Please note that while this project still contains significant functionality, there are a few implementation bugs, and **no further updates or fixes will be provided by the author.** Feel free to reach out if you'd like to work on this project or have any questions.
+
 <p align="center">
     <picture>
         <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text-dark.png">
